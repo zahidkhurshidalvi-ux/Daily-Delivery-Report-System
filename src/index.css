@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/* Comprehensive A4 Print Styles for Daily Delivery Reports */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+
+  /* Hide UI elements that are irrelevant during printing */
+  header,
+  aside,
+  nav,
+  button,
+  input,
+  select,
+  textarea,
+  .no-print,
+  .no-print-area {
+    display: none !important;
+  }
+
+  /* Reveal print-only elements */
+  .print-only-header {
+    display: block !important;
+  }
+
+  /* Body and Layout Normalization */
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10pt !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.3 !important;
+  }
+
+  main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Container & Cards Styling for High-Contrast Clean Printing */
+  .bg-white,
+  .bg-gray-50,
+  .bg-emerald-50,
+  .bg-[#00401A],
+  .bg-[#006633] {
+    background-color: transparent !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border-color: #94a3b8 !important;
+  }
+
+  /* High-Contrast Crisp Tables */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9.5pt !important;
+    margin-top: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  th,
+  td {
+    border: 1px solid #475569 !important;
+    padding: 5px 7px !important;
+    color: #000000 !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    font-size: 8.5pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Text Colors Reset for Sharpness */
+  .text-gray-900,
+  .text-gray-800,
+  .text-gray-700,
+  .text-[#006633],
+  .text-emerald-700,
+  .text-emerald-800,
+  .text-red-600,
+  .text-amber-600,
+  .text-blue-600 {
+    color: #000000 !important;
+  }
+}
+
+/* Print Only Utility */
+.print-only-header {
+  display: none;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Pakistan Post - Daily Delivery Reporting System",
+  "description": "Official Divisional Superintendent Postal Services Daily Delivery Reporting System featuring multi-role authentication, automated balance carry-forward, pending office monitoring, WhatsApp reminders, PDF/Excel generation, and Google Apps Script integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
