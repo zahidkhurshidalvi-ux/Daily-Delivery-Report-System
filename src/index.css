@@ -101,6 +101,14 @@
 }
 
 /* Print Only Utility */
-.print-only-header {
+.print-only-header,
+.print-only-block {
   display: none;
+}
+
+@media print {
+  .print-only-header,
+  .print-only-block {
+    display: block !important;
+  }
 }
