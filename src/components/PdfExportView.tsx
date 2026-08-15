@@ -34,7 +34,7 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
   selectedDate,
   setSelectedDate,
 }) => {
-  const [divisionName, setDivisionName] = useState('Divisional Superintendent Postal Services');
+  const [divisionName, setDivisionName] = useState('Gujranwala Division');
   const dateReports = getCompleteDateReports(reports, postOffices, selectedDate);
   const totals = summarizeReports(dateReports);
 
@@ -273,7 +273,7 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
               <div className="w-64 border-t border-slate-500 pt-1 text-center font-bold text-[#006633]">
                 Divisional Superintendent Postal Services
                 <span className="block text-[10px] text-slate-500 font-normal">
-                  Pakistan Post, Federal Circle
+                  Pakistan Post, Gujranwala Division
                 </span>
               </div>
             </div>

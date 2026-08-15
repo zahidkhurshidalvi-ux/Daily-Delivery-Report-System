@@ -6,7 +6,7 @@ import { formatDatePK, formatNumber, summarizeReports } from './calculations';
 export function generateDailyReportPDF(
   reports: DailyReport[],
   reportDate: string,
-  divisionName: string = 'Divisional Superintendent Postal Services'
+  divisionName: string = 'Gujranwala Division'
 ) {
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -190,7 +190,7 @@ export function generateDailyReportPDF(
 
   doc.text('Prepared By: System Admin / In-Charge', 20, sigY + 5);
   doc.text('Divisional Superintendent Postal Services', 200, sigY + 5);
-  doc.text('Pakistan Post, Federal Circle', 200, sigY + 9);
+  doc.text('Pakistan Post, Gujranwala Division', 200, sigY + 9);
 
   // Footer
   doc.setFontSize(7.5);
@@ -246,7 +246,7 @@ export function triggerPrintableWindow(reports: DailyReport[], dateStr: string) 
 
         <div class="header">
           <h1>PAKISTAN POST - DAILY DELIVERY REPORT</h1>
-          <p>DIVISIONAL SUPERINTENDENT POSTAL SERVICES | DATE: ${formatDatePK(dateStr)}</p>
+          <p>GUJRANWALA DIVISION | DATE: ${formatDatePK(dateStr)}</p>
         </div>
 
         <div class="summary-grid" style="grid-template-columns: repeat(7, 1fr);">
@@ -312,7 +312,7 @@ export function triggerPrintableWindow(reports: DailyReport[], dateStr: string) 
           <div class="sig-line">In-Charge / Reporting Officer</div>
           <div class="sig-line">
             Divisional Superintendent Postal Services<br>
-            <small>Pakistan Post</small>
+            <small>Pakistan Post, Gujranwala Division</small>
           </div>
         </div>
       </body>

@@ -282,6 +282,11 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
               className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-semibold rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
               required
             />
+            {date && (
+              <p className="text-[10px] text-gray-500 mt-1 font-medium">
+                Format: <span className="font-bold text-[#006633]">{formatDatePK(date)}</span> (DD/MM/YYYY)
+              </p>
+            )}
           </div>
 
           <div>

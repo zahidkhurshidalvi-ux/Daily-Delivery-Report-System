@@ -86,17 +86,39 @@ export function formatDatePK(dateStr: string): string {
   if (!dateStr) return '';
   const clean = dateStr.trim();
   
-  // Directly split YYYY-MM-DD to avoid new Date() timezone rollback
-  if (clean.includes('-')) {
-    const datePart = clean.split('T')[0];
+  // Handle ISO strings with T or space
+  const datePart = clean.split('T')[0].split(' ')[0];
+
+  // Directly split YYYY-MM-DD
+  if (datePart.includes('-')) {
     const parts = datePart.split('-');
     if (parts.length === 3) {
-      const [year, month, day] = parts;
-      return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD -> DD/MM/YYYY
+        const [year, month, day] = parts;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      } else if (parts[2].length === 4) {
+        // DD-MM-YYYY -> DD/MM/YYYY
+        const [day, month, year] = parts;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      }
     }
   }
 
-  if (clean.includes('/')) {
+  // Handle slashes
+  if (datePart.includes('/')) {
+    const parts = datePart.split('/');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // YYYY/MM/DD -> DD/MM/YYYY
+        const [year, month, day] = parts;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      } else {
+        // Already DD/MM/YYYY or D/M/YYYY
+        const [day, month, year] = parts;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      }
+    }
     return clean;
   }
 

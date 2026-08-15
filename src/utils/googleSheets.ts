@@ -1,37 +1,47 @@
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signOut,
+  User,
+} from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
 import { DailyReport } from '../types';
+import { formatDatePK } from './calculations';
 
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        oauth2: {
-          initTokenClient: (config: {
-            client_id: string;
-            scope: string;
-            callback: (response: {
-              access_token?: string;
-              error?: string;
-              expires_in?: number;
-            }) => void;
-            error_callback?: (err: any) => void;
-          }) => {
-            requestAccessToken: (options?: { prompt?: string }) => void;
-          };
-          hasGrantedAllScopes: (tokenResponse: any, ...scopes: string[]) => boolean;
-        };
-      };
-    };
-  }
-}
+// Initialize Firebase App & Auth
+const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+export const firebaseAuth = getAuth(firebaseApp);
+
+export const googleOAuthProvider = new GoogleAuthProvider();
+googleOAuthProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+googleOAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
+googleOAuthProvider.setCustomParameters({
+  prompt: 'consent',
+  access_type: 'offline',
+});
 
 export const SHEETS_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive.file',
 ].join(' ');
 
-// Token Storage
+// Token & User Storage (In-memory caching per guidelines)
 let inMemoryToken: string | null = null;
 let tokenExpiryTimestamp: number | null = null;
+let currentUser: User | null = null;
+let isSigningIn = false;
+
+// Listen to auth state changes to clear/maintain session
+onAuthStateChanged(firebaseAuth, (user) => {
+  currentUser = user;
+  if (!user && !isSigningIn) {
+    inMemoryToken = null;
+    tokenExpiryTimestamp = null;
+  }
+});
 
 export const setGoogleAccessToken = (token: string, expiresInSeconds = 3500) => {
   inMemoryToken = token;
@@ -62,80 +72,63 @@ export const getGoogleAccessToken = (): string | null => {
   return null;
 };
 
-export const clearGoogleToken = () => {
+export const clearGoogleToken = async () => {
   inMemoryToken = null;
   tokenExpiryTimestamp = null;
+  currentUser = null;
   try {
     sessionStorage.removeItem('pak_post_google_token');
     sessionStorage.removeItem('pak_post_google_token_exp');
+    await signOut(firebaseAuth);
   } catch (e) {
     // Ignore
   }
 };
 
 /**
- * Initialize GIS Token Client and request access token
+ * Request Google OAuth token via Firebase Popup
  */
-export const requestGoogleOAuthToken = (
-  clientId?: string,
+export const requestGoogleOAuthToken = async (
+  _customClientId?: string,
   onSuccess?: (token: string) => void,
   onError?: (err: any) => void
 ): Promise<string> => {
-  return new Promise((resolve, reject) => {
+  try {
     // Check if token already valid
     const existing = getGoogleAccessToken();
     if (existing) {
       if (onSuccess) onSuccess(existing);
-      resolve(existing);
-      return;
+      return existing;
     }
 
-    if (!window.google?.accounts?.oauth2) {
-      const err = new Error(
-        'Google Identity Services library is still loading. Please wait 2 seconds and try again.'
-      );
-      if (onError) onError(err);
-      reject(err);
-      return;
+    isSigningIn = true;
+    const result = await signInWithPopup(firebaseAuth, googleOAuthProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    
+    const accessToken = credential?.accessToken;
+    if (!accessToken) {
+      throw new Error('Google did not return an access token. Please ensure popup was not blocked.');
     }
 
-    // Resolve client ID from environment or user override
-    const effectiveClientId =
-      clientId ||
-      ((import.meta as any).env?.VITE_GOOGLE_CLIENT_ID as string) ||
-      '653201276103-mock-oauth-client.apps.googleusercontent.com';
+    setGoogleAccessToken(accessToken, 3599);
+    currentUser = result.user;
 
-    try {
-      const tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: effectiveClientId,
-        scope: SHEETS_SCOPES,
-        callback: (resp) => {
-          if (resp.error) {
-            const err = new Error(`OAuth error: ${resp.error}`);
-            if (onError) onError(err);
-            reject(err);
-          } else if (resp.access_token) {
-            setGoogleAccessToken(resp.access_token, resp.expires_in || 3599);
-            if (onSuccess) onSuccess(resp.access_token);
-            resolve(resp.access_token);
-          } else {
-            const err = new Error('No access token returned by Google.');
-            if (onError) onError(err);
-            reject(err);
-          }
-        },
-        error_callback: (err) => {
-          if (onError) onError(err);
-          reject(err);
-        },
-      });
-
-      tokenClient.requestAccessToken({ prompt: 'consent' });
-    } catch (e: any) {
-      if (onError) onError(e);
-      reject(e);
+    if (onSuccess) onSuccess(accessToken);
+    return accessToken;
+  } catch (error: any) {
+    console.error('Google Sign In Error:', error);
+    let friendlyMessage = error.message || 'Google authentication failed';
+    if (error.code === 'auth/popup-closed-by-user') {
+      friendlyMessage = 'Sign-in popup was closed before completing.';
+    } else if (error.code === 'auth/popup-blocked') {
+      friendlyMessage = 'Sign-in popup was blocked by browser. Please allow popups for this site.';
     }
-  });
+    const err = new Error(friendlyMessage);
+    if (onError) onError(err);
+    throw err;
+  } finally {
+    isSigningIn = false;
+  }
 };
 
 /**
@@ -179,7 +172,7 @@ export const reportToRowValues = (report: DailyReport, index: number): (string |
   const total = (Number(report.lastBalance) || 0) + (Number(report.receivedToday) || 0);
   return [
     index + 1,
-    report.date || '',
+    formatDatePK(report.date) || report.date || '',
     report.officeName || '',
     report.postmasterName || '',
     Number(report.lastBalance) || 0,
@@ -244,7 +237,7 @@ export const createPakistanPostSpreadsheet = async (
 
   // Apply Title Banner & Headers
   const bannerRow = [
-    'PAKISTAN POST - DIVISIONAL SUPERINTENDENT DAILY DELIVERY REPORTING SYSTEM',
+    'PAKISTAN POST - GUJRANWALA DIVISION DAILY DELIVERY REPORTING SYSTEM',
   ];
   
   await fetch(
@@ -334,7 +327,7 @@ export const bulkSyncReportsToGoogleSheet = async (
 
   // Banner + Header + all data rows
   const allValues = [
-    ['PAKISTAN POST - DIVISIONAL SUPERINTENDENT DAILY DELIVERY REPORTING SYSTEM'],
+    ['PAKISTAN POST - GUJRANWALA DIVISION DAILY DELIVERY REPORTING SYSTEM'],
     REPORT_HEADERS,
     ...rows,
   ];

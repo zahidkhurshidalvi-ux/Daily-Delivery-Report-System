@@ -86,15 +86,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div>
           <div className="flex items-center space-x-2">
             <span className="bg-[#00401A] text-white font-bold text-[10px] px-2 py-0.5 rounded uppercase tracking-wider">
-              Central Executive Overview
+              Gujranwala Division Executive Overview
             </span>
-            <span className="text-gray-500 text-xs font-mono">Circle Code: PAK-POST-DIV-01</span>
+            <span className="text-gray-500 text-xs font-mono">Division: Gujranwala</span>
           </div>
           <h2 className="text-xl font-extrabold mt-1 text-gray-900 tracking-tight">
             Daily Delivery Performance Dashboard
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Monitoring {activeOffices.length} Post Offices across the Superintendent Circle.
+            Monitoring {activeOffices.length} Post Offices across Gujranwala Division.
           </p>
         </div>
 

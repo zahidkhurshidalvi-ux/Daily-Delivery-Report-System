@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DailyReport, GoogleSheetsConfig, SystemLog } from '../types';
+import { formatDatePK } from '../utils/calculations';
 import {
   requestGoogleOAuthToken,
   getGoogleAccessToken,
@@ -538,7 +539,7 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
                     return (
                       <tr key={r.id} className="hover:bg-slate-50">
                         <td className="px-3 py-1.5 font-bold text-slate-900">{idx + 1}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap font-medium text-slate-700">{r.date}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap font-medium text-slate-700">{formatDatePK(r.date)}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap font-bold text-emerald-900">{r.officeName}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap text-slate-600">{r.postmasterName}</td>
                         <td className="px-3 py-1.5 text-right font-medium">{r.lastBalance}</td>
