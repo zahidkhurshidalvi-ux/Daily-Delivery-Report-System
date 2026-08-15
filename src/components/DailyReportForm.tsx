@@ -262,13 +262,24 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         {/* Section 1: Date & Post Office Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">Report Date *</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-gray-700">Report Date *</label>
+              {!editingReport && (
+                <button
+                  type="button"
+                  onClick={() => setDate(getTodayDateString())}
+                  className="text-[10px] text-[#006633] hover:underline font-bold"
+                >
+                  Set to Today ({formatDatePK(getTodayDateString())})
+                </button>
+              )}
+            </div>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
               disabled={Boolean(editingReport)}
-              className="w-full bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
+              className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-semibold rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
               required
             />
           </div>

@@ -109,6 +109,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
               onChange={(e) => setSelectedDate(e.target.value)}
               className="bg-white text-gray-800 text-xs px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#006633]"
             />
+            {selectedDate !== getTodayDateString() && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(getTodayDateString())}
+                className="text-[10px] bg-[#006633] text-white px-2 py-0.5 rounded font-bold hover:bg-[#00401A] transition-colors"
+                title="Jump to Today's date"
+              >
+                Today
+              </button>
+            )}
           </div>
 
           <button

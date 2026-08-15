@@ -10,6 +10,7 @@ import {
   formatNumber,
   summarizeReports,
   getCompleteDateReports,
+  getTodayDateString,
 } from '../utils/calculations';
 import {
   Printer,
@@ -75,6 +76,16 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
             onChange={(e) => setSelectedDate(e.target.value)}
             className="bg-white border border-gray-300 text-gray-900 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#006633]"
           />
+          {selectedDate !== getTodayDateString() && (
+            <button
+              type="button"
+              onClick={() => setSelectedDate(getTodayDateString())}
+              className="text-[10px] bg-[#006633] text-white px-2.5 py-2 rounded-lg font-bold hover:bg-[#00401A] transition-colors"
+              title="Set to Today's date"
+            >
+              Today
+            </button>
+          )}
 
           <button
             onClick={handleDownloadPDF}

@@ -243,9 +243,22 @@ export const ReportsList: React.FC<ReportsListProps> = ({
 
           {/* Single Date Filter */}
           <div>
-            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
-              Specific Date
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase">
+                Specific Date
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterDate(getTodayDateString());
+                  setFromDate('');
+                  setToDate('');
+                }}
+                className="text-[10px] text-[#006633] hover:underline font-bold"
+              >
+                Today
+              </button>
+            </div>
             <input
               type="date"
               value={filterDate}

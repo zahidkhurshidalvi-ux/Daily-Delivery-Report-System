@@ -80,11 +80,28 @@ export function formatNumber(val: number): string {
 
 /**
  * Formats date to localized Pakistani format: DD/MM/YYYY
+ * Strictly avoids UTC timezone midnight rollback
  */
 export function formatDatePK(dateStr: string): string {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
+  const clean = dateStr.trim();
+  
+  // Directly split YYYY-MM-DD to avoid new Date() timezone rollback
+  if (clean.includes('-')) {
+    const datePart = clean.split('T')[0];
+    const parts = datePart.split('-');
+    if (parts.length === 3) {
+      const [year, month, day] = parts;
+      return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+    }
+  }
+
+  if (clean.includes('/')) {
+    return clean;
+  }
+
+  const d = new Date(clean);
+  if (isNaN(d.getTime())) return clean;
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
@@ -92,14 +109,25 @@ export function formatDatePK(dateStr: string): string {
 }
 
 /**
- * Returns today's date in YYYY-MM-DD format
+ * Returns today's date in YYYY-MM-DD format using Pakistan Standard Time (PKT, UTC+5)
+ * or local timezone, ensuring it matches the exact current operational day.
  */
-export function getTodayDateString(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+export function getTodayDateString(timeZone: string = 'Asia/Karachi'): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone || 'Asia/Karachi',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return formatter.format(new Date()); // Formats as YYYY-MM-DD in PKT!
+  } catch (e) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 }
 
 /**
