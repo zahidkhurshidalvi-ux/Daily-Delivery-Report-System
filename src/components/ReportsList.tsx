@@ -1,26 +1,22 @@
 import React, { useState } from 'react';
 import { DailyReport, PostOffice, User } from '../types';
-import { formatNumber, formatDatePK, getTodayDateString, getCompleteDateReports } from '../utils/calculations';
+import { formatNumber, formatDatePK, getTodayDateString } from '../utils/calculations';
 import {
-  Search,
-  Filter,
   Edit2,
   Trash2,
   FileSpreadsheet,
   Download,
-  Calendar,
   Building2,
   XCircle,
   Printer,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  CalendarDays,
-  CheckCircle2,
-  Clock,
-  SlidersHorizontal,
+  Percent,
+  Calendar,
 } from 'lucide-react';
 import { exportDailyReportsToExcel } from '../utils/excelExport';
+import { triggerPrintableWindow } from '../utils/pdfGenerator';
 
 interface ReportsListProps {
   reports: DailyReport[];
@@ -42,16 +38,6 @@ type SortField =
   | 'deposit'
   | 'rate';
 
-type DatePreset =
-  | 'all'
-  | 'today'
-  | 'yesterday'
-  | 'weekly'
-  | 'this_month'
-  | 'last_month'
-  | 'this_year'
-  | 'custom';
-
 export const ReportsList: React.FC<ReportsListProps> = ({
   reports,
   postOffices = [],
@@ -62,12 +48,11 @@ export const ReportsList: React.FC<ReportsListProps> = ({
 }) => {
   const today = getTodayDateString();
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterDate, setFilterDate] = useState('');
+  const [dateFilterMode, setDateFilterMode] = useState<'single' | 'range' | 'all'>('single');
+  const [singleDate, setSingleDate] = useState(today);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [filterOffice, setFilterOffice] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('');
-  const [datePreset, setDatePreset] = useState<DatePreset>('all');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -85,24 +70,28 @@ export const ReportsList: React.FC<ReportsListProps> = ({
       ? reports.filter((r) => r.officeName === currentUser.officeName)
       : reports;
 
-  // 2. Base Reports: If a specific date is filtered, include active offices that haven't submitted till 5 PM
-  const baseReports = filterDate
-    ? getCompleteDateReports(roleFilteredReports, postOffices, filterDate)
-    : roleFilteredReports;
+  // 2. Base Reports
+  const baseReports = roleFilteredReports;
 
-  // 3. Search & Filter criteria
+  // 3. Search & Filter criteria: Office, Single Date OR Date Range
   const filteredReports = baseReports.filter((r) => {
     const matchesSearch =
+      !searchTerm ||
       r.officeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.remarks && r.remarks.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesMonth = !selectedMonth || r.date.startsWith(selectedMonth);
-    const matchesSingleDate = !filterDate || r.date === filterDate;
-    const matchesFromDate = !fromDate || r.date >= fromDate;
-    const matchesToDate = !toDate || r.date <= toDate;
+    let matchesDate = true;
+    if (dateFilterMode === 'single') {
+      matchesDate = !singleDate || r.date === singleDate;
+    } else if (dateFilterMode === 'range') {
+      const matchesFrom = !fromDate || r.date >= fromDate;
+      const matchesTo = !toDate || r.date <= toDate;
+      matchesDate = matchesFrom && matchesTo;
+    }
+
     const matchesOffice = !filterOffice || r.officeName === filterOffice;
 
-    return matchesSearch && matchesMonth && matchesSingleDate && matchesFromDate && matchesToDate && matchesOffice;
+    return matchesSearch && matchesDate && matchesOffice;
   });
 
   // 4. Sorting logic
@@ -158,13 +147,14 @@ export const ReportsList: React.FC<ReportsListProps> = ({
   // Calculate Cumulative Summary Totals for filtered reports
   const summaryTotals = sortedReports.reduce(
     (acc, r) => ({
+      lastBalance: acc.lastBalance + r.lastBalance,
       received: acc.received + r.receivedToday,
       delivered: acc.delivered + r.delivered,
       returned: acc.returned + r.returnedToSender,
       missent: acc.missent + r.missent,
       deposit: acc.deposit + r.deposit,
     }),
-    { received: 0, delivered: 0, returned: 0, missent: 0, deposit: 0 }
+    { lastBalance: 0, received: 0, delivered: 0, returned: 0, missent: 0, deposit: 0 }
   );
 
   const deliveryRate =
@@ -172,172 +162,127 @@ export const ReportsList: React.FC<ReportsListProps> = ({
       ? ((summaryTotals.delivered / summaryTotals.received) * 100).toFixed(1)
       : '0.0';
 
-  // Apply Quick Date Range Preset
-  const applyDatePreset = (preset: DatePreset) => {
-    setDatePreset(preset);
-    const now = new Date();
-
-    if (preset === 'all') {
-      setFromDate('');
-      setToDate('');
-      setFilterDate('');
-      setSelectedMonth('');
-    } else if (preset === 'today') {
-      const todayStr = getTodayDateString();
-      setFilterDate(todayStr);
-      setFromDate('');
-      setToDate('');
-      setSelectedMonth('');
-    } else if (preset === 'yesterday') {
-      const yDate = new Date();
-      yDate.setDate(yDate.getDate() - 1);
-      const yYear = yDate.getFullYear();
-      const yMonth = String(yDate.getMonth() + 1).padStart(2, '0');
-      const yDay = String(yDate.getDate()).padStart(2, '0');
-      const yStr = `${yYear}-${yMonth}-${yDay}`;
-      setFilterDate(yStr);
-      setFromDate('');
-      setToDate('');
-      setSelectedMonth('');
-    } else if (preset === 'weekly') {
-      const past7 = new Date();
-      past7.setDate(past7.getDate() - 6);
-      const fYear = past7.getFullYear();
-      const fMonth = String(past7.getMonth() + 1).padStart(2, '0');
-      const fDay = String(past7.getDate()).padStart(2, '0');
-      setFromDate(`${fYear}-${fMonth}-${fDay}`);
-      setToDate(today);
-      setFilterDate('');
-      setSelectedMonth('');
-    } else if (preset === 'this_month') {
-      const curMonth = today.slice(0, 7);
-      setSelectedMonth(curMonth);
-      setFromDate(`${curMonth}-01`);
-      setToDate(today);
-      setFilterDate('');
-    } else if (preset === 'last_month') {
-      const prevM = new Date();
-      prevM.setMonth(prevM.getMonth() - 1);
-      const lmYear = prevM.getFullYear();
-      const lmMonth = String(prevM.getMonth() + 1).padStart(2, '0');
-      const lmStr = `${lmYear}-${lmMonth}`;
-      const lastDayOfPrevMonth = new Date(lmYear, prevM.getMonth() + 1, 0).getDate();
-      setSelectedMonth(lmStr);
-      setFromDate(`${lmStr}-01`);
-      setToDate(`${lmStr}-${String(lastDayOfPrevMonth).padStart(2, '0')}`);
-      setFilterDate('');
-    } else if (preset === 'this_year') {
-      const curYear = today.slice(0, 4);
-      setFromDate(`${curYear}-01-01`);
-      setToDate(`${curYear}-12-31`);
-      setFilterDate('');
-      setSelectedMonth('');
-    } else if (preset === 'custom') {
-      setFilterDate('');
-      setSelectedMonth('');
-    }
-  };
-
-  // Dynamic Period Label
+  // Dynamic Period Label (DD/MM/YYYY)
   const getPeriodLabel = () => {
-    if (selectedMonth) return `Month: ${selectedMonth}`;
-    if (filterDate) return `Date: ${formatDatePK(filterDate)}`;
-    if (fromDate || toDate) {
-      return `${fromDate ? formatDatePK(fromDate) : 'Start'} to ${toDate ? formatDatePK(toDate) : 'Latest'}`;
+    if (dateFilterMode === 'single') {
+      return singleDate ? formatDatePK(singleDate) : 'ALL DATES';
     }
-    return 'All Records Archive';
+    if (dateFilterMode === 'range') {
+      if (fromDate && toDate) {
+        if (fromDate === toDate) return formatDatePK(fromDate);
+        return `${formatDatePK(fromDate)} TO ${formatDatePK(toDate)}`;
+      }
+      if (fromDate) return `FROM ${formatDatePK(fromDate)} ONWARDS`;
+      if (toDate) return `UP TO ${formatDatePK(toDate)}`;
+      return 'ALL RECORD DATES';
+    }
+    return 'ALL RECORD DATES';
   };
-
-  const dynamicPrintTitle = filterOffice
-    ? `Gujranwala Division - ${filterOffice} Performance Summary`
-    : `Gujranwala Division - Performance Summary (${getPeriodLabel()})`;
 
   const handleExportExcel = () => {
     const officeClean = filterOffice ? filterOffice.replace(/\s+/g, '_') : 'Gujranwala_Division';
-    const periodClean = datePreset !== 'all' ? datePreset : 'All_Records';
+    const periodClean =
+      dateFilterMode === 'single'
+        ? (singleDate || 'All')
+        : (fromDate || toDate ? `${fromDate || 'Start'}_to_${toDate || 'Latest'}` : 'All_Dates');
     exportDailyReportsToExcel(sortedReports, `PakPost_${officeClean}_${periodClean}_${getTodayDateString()}`);
   };
 
-  const handlePrintReports = (customTitle?: string) => {
-    const prevTitle = document.title;
-    document.title = customTitle || dynamicPrintTitle;
-    window.print();
-    setTimeout(() => {
-      document.title = prevTitle;
-    }, 1000);
+  const handlePrintA4 = () => {
+    triggerPrintableWindow(sortedReports, getPeriodLabel(), filterOffice);
   };
 
   const handleClearFilters = () => {
     setSearchTerm('');
-    setFilterDate('');
+    setSingleDate('');
     setFromDate('');
     setToDate('');
     setFilterOffice('');
-    setSelectedMonth('');
-    setDatePreset('all');
+    setDateFilterMode('all');
     setSortField('date');
     setSortOrder('desc');
   };
 
   const hasActiveFilters = Boolean(
-    searchTerm || filterDate || fromDate || toDate || filterOffice || selectedMonth || datePreset !== 'all'
+    searchTerm ||
+    filterOffice ||
+    (dateFilterMode === 'single' && singleDate) ||
+    (dateFilterMode === 'range' && (fromDate || toDate))
   );
 
   return (
     <div className="space-y-4">
-      {/* Official Print Header (Visible ONLY during Printing) */}
-      <div className="print-only-header hidden pb-4 mb-4 border-b-2 border-gray-800">
-        <div className="flex items-center justify-between">
+      {/* ========================================================================= */}
+      {/* OFFICIAL PAKISTAN POST A4 PRINT HEADER (Visible ONLY during Printing)     */}
+      {/* ========================================================================= */}
+      <div className="print-only-header hidden pb-3 mb-3 border-b-2 border-black text-center">
+        {/* Line 1: PAKISTAN POST */}
+        <div className="text-base font-black tracking-widest text-black uppercase">
+          PAKISTAN POST
+        </div>
+
+        {/* Line 2: OFFICE OF THE DIVISIONAL SUPERINTENDENT POSTAL SERVICES GUJRANWALA DIVISION */}
+        <div className="text-xs font-extrabold uppercase text-black mt-0.5 tracking-tight">
+          OFFICE OF THE DIVISIONAL SUPERINTENDENT POSTAL SERVICES GUJRANWALA DIVISION
+        </div>
+
+        {/* Line 3: DAILY DELIVERY REPORT */}
+        <div className="my-1.5">
+          <span className="text-sm font-black uppercase tracking-wider text-black border-y-2 border-black py-0.5 px-6 inline-block bg-gray-100">
+            DAILY DELIVERY REPORT
+          </span>
+        </div>
+
+        {/* Line 4: Date Range & Office Info */}
+        <div className="flex items-center justify-between text-[9.5px] font-bold text-black mt-1.5 px-1 border-t border-gray-400 pt-1">
           <div>
-            <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#006633]">
-              PAKISTAN POST • GUJRANWALA DIVISION
-            </div>
-            <h1 className="text-xl font-extrabold uppercase tracking-tight text-black mt-0.5">
-              {dynamicPrintTitle}
-            </h1>
-            <p className="text-xs font-bold text-gray-700">
-              DIVISIONAL SUPERINTENDENT POSTAL SERVICES | GUJRANWALA DIVISION
-            </p>
-            <p className="text-[11px] text-gray-600 mt-1">
-              Office: <span className="font-bold">{filterOffice || 'All Post Offices in Division'}</span> | Period:{' '}
-              <span className="font-bold">{getPeriodLabel()}</span>
-            </p>
+            <span>POST OFFICE: </span>
+            <span className="font-extrabold underline uppercase">
+              {filterOffice || 'ALL POST OFFICES (GUJRANWALA DIVISION)'}
+            </span>
           </div>
-          <div className="text-right text-xs">
-            <p className="font-bold text-black">Printed On: {formatDatePK(getTodayDateString())}</p>
-            <p className="text-gray-600 font-mono text-[10px]">Total Reports: {sortedReports.length}</p>
-            <p className="text-gray-800 font-bold text-[10px] mt-0.5">
-              Delivery Rate: <span className="text-[#006633]">{deliveryRate}%</span>
-            </p>
+          <div>
+            <span>DATE / PERIOD: </span>
+            <span className="font-extrabold underline font-mono">
+              {getPeriodLabel()}
+            </span>
+          </div>
+          <div>
+            <span>PRINTED ON: </span>
+            <span className="font-mono">{formatDatePK(today)}</span>
           </div>
         </div>
 
         {/* Print Summary Totals Box */}
-        <div className="grid grid-cols-5 gap-2 mt-3 pt-2 border-t border-gray-300 text-center text-[10px]">
-          <div className="border border-gray-400 p-1.5 rounded">
-            <span className="text-gray-600 block uppercase font-bold">Total Received</span>
-            <strong className="text-xs text-black font-extrabold">{formatNumber(summaryTotals.received)}</strong>
+        <div className="grid grid-cols-6 gap-1.5 mt-2 pt-1.5 border-t border-black text-center text-[9px]">
+          <div className="border border-black p-1">
+            <span className="text-gray-700 block uppercase font-bold text-[8px]">Last Balance</span>
+            <strong className="text-[10px] text-black font-black font-mono">{formatNumber(summaryTotals.lastBalance)}</strong>
           </div>
-          <div className="border border-gray-400 p-1.5 rounded">
-            <span className="text-gray-600 block uppercase font-bold">Total Delivered</span>
-            <strong className="text-xs text-black font-extrabold">{formatNumber(summaryTotals.delivered)}</strong>
+          <div className="border border-black p-1">
+            <span className="text-gray-700 block uppercase font-bold text-[8px]">Received</span>
+            <strong className="text-[10px] text-black font-black font-mono">{formatNumber(summaryTotals.received)}</strong>
           </div>
-          <div className="border border-gray-400 p-1.5 rounded">
-            <span className="text-gray-600 block uppercase font-bold">Returned / RTS</span>
-            <strong className="text-xs text-black font-extrabold">{formatNumber(summaryTotals.returned)}</strong>
+          <div className="border border-black p-1">
+            <span className="text-gray-700 block uppercase font-bold text-[8px]">Delivered</span>
+            <strong className="text-[10px] text-black font-black font-mono">{formatNumber(summaryTotals.delivered)}</strong>
           </div>
-          <div className="border border-gray-400 p-1.5 rounded">
-            <span className="text-gray-600 block uppercase font-bold">Missent Articles</span>
-            <strong className="text-xs text-black font-extrabold">{formatNumber(summaryTotals.missent)}</strong>
+          <div className="border border-black p-1 bg-gray-100">
+            <span className="text-gray-900 block uppercase font-black text-[8px]">Delivery %</span>
+            <strong className="text-[11px] text-black font-black font-mono">{deliveryRate}%</strong>
           </div>
-          <div className="border border-gray-400 p-1.5 rounded">
-            <span className="text-gray-600 block uppercase font-bold">In-Hand Deposit</span>
-            <strong className="text-xs text-black font-extrabold">{formatNumber(summaryTotals.deposit)}</strong>
+          <div className="border border-black p-1">
+            <span className="text-gray-700 block uppercase font-bold text-[8px]">Returned (RTS)</span>
+            <strong className="text-[10px] text-black font-black font-mono">{formatNumber(summaryTotals.returned)}</strong>
+          </div>
+          <div className="border border-black p-1">
+            <span className="text-gray-700 block uppercase font-bold text-[8px]">In-Hand Deposit</span>
+            <strong className="text-[10px] text-black font-black font-mono">{formatNumber(summaryTotals.deposit)}</strong>
           </div>
         </div>
       </div>
 
-      {/* Main Top Header & Action Controls */}
+      {/* Main Top Header & Action Controls (No Print) */}
       <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm space-y-3 no-print">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-100 pb-3">
           <div className="flex items-center space-x-3">
@@ -346,10 +291,10 @@ export const ReportsList: React.FC<ReportsListProps> = ({
             </div>
             <div>
               <h2 className="text-base font-extrabold text-gray-900 uppercase tracking-tight">
-                {currentUser?.role === 'ADMIN' ? 'Gujranwala Division Reports & Archive' : 'Office Submission Archive'}
+                {currentUser?.role === 'ADMIN' ? 'Daily Delivery Summary & Reports' : 'Office Submission Archive'}
               </h2>
               <p className="text-xs text-gray-500 font-medium">
-                {sortedReports.length} reports match current filters • Gujranwala Division
+                {sortedReports.length} reports • Overall Delivery Rate: <strong className="text-[#006633] font-bold">{deliveryRate}%</strong>
               </p>
             </div>
           </div>
@@ -365,20 +310,20 @@ export const ReportsList: React.FC<ReportsListProps> = ({
               </button>
             )}
 
-            {/* Print All Monthly / Office Summary Button */}
+            {/* Prominent Official A4 Print Option */}
             <button
-              onClick={() => handlePrintReports(dynamicPrintTitle)}
-              className="bg-[#00401A] hover:bg-[#003014] text-white text-xs font-bold px-3 py-2 rounded-lg transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              title="Print Summary Report with official Gujranwala Division header"
+              onClick={handlePrintA4}
+              className="bg-[#00401A] hover:bg-[#003014] text-white text-xs font-bold px-3.5 py-2 rounded-lg transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
+              title="Print standard A4 format daily delivery report"
             >
-              <Printer className="w-3.5 h-3.5 text-emerald-300" />
-              <span>Print Performance Summary</span>
+              <Printer className="w-4 h-4 text-emerald-300" />
+              <span>Print Report (A4)</span>
             </button>
 
             <button
               onClick={handleExportExcel}
               className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold px-3 py-2 rounded-lg transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              title="Export Current Filtered List to Microsoft Excel"
+              title="Export filtered reports to Microsoft Excel"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Excel Export</span>
@@ -386,201 +331,215 @@ export const ReportsList: React.FC<ReportsListProps> = ({
 
             <button
               onClick={onOpenNewReport}
-              className="bg-[#005522] hover:bg-[#00401A] text-white text-xs font-bold px-3 py-2 rounded-lg transition-all shadow-xs cursor-pointer"
+              className="bg-[#005522] hover:bg-[#00401A] text-white text-xs font-bold px-3.5 py-2 rounded-lg transition-all shadow-xs cursor-pointer"
             >
               + New Report
             </button>
           </div>
         </div>
 
-        {/* Quick Time Period Preset Tabs */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase">
-            <span className="flex items-center space-x-1">
-              <Clock className="w-3.5 h-3.5 text-[#006633]" />
-              <span>Quick Time Period Presets (ہفتہ وار / ماہانہ / تاریخ تا تاریخ)</span>
-            </span>
-            {filterOffice && (
-              <span className="text-[#006633] font-bold">
-                Filtered: <strong className="underline">{filterOffice}</strong>
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              { id: 'all', label: 'All Records (تمام)' },
-              { id: 'today', label: 'Today (آج)' },
-              { id: 'yesterday', label: 'Yesterday (گزشتہ روز)' },
-              { id: 'weekly', label: 'This Week / 7 Days (ہفتہ وار)' },
-              { id: 'this_month', label: 'This Month (ماہانہ)' },
-              { id: 'last_month', label: 'Last Month (گزشتہ ماہ)' },
-              { id: 'this_year', label: 'Year 2026 (سالانہ)' },
-              { id: 'custom', label: 'Custom Date-to-Date (تاریخ تا تاریخ)' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => applyDatePreset(tab.id as DatePreset)}
-                className={`text-xs px-3 py-1.5 rounded-md font-bold transition-all cursor-pointer ${
-                  datePreset === tab.id
-                    ? 'bg-[#006633] text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Filter Controls Row: Office Wise, Date To/From, Month & Sorting System */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-xs pt-2 border-t border-gray-100">
-          {/* 1. Office Wise Selection Filter */}
-          <div className="lg:col-span-1">
-            <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1 flex items-center space-x-1">
-              <Building2 className="w-3 h-3 text-[#006633]" />
-              <span>1. Office Wise Filter</span>
-            </label>
-            <select
-              value={filterOffice}
-              onChange={(e) => setFilterOffice(e.target.value)}
-              className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
-            >
-              <option value="">All Post Offices ({officeOptions.length})</option>
-              {officeOptions.map((name) => {
-                const count = reports.filter((r) => r.officeName === name).length;
-                return (
-                  <option key={name} value={name}>
-                    {name} ({count} reports)
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          {/* 2. From Date Filter (DD/MM/YYYY) */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[10px] font-bold text-gray-600 uppercase">
-                2. From Date (از تاریخ)
+        {/* Clean Filter Controls: Office Wise, Date Mode Selector, Single / Range Date Pickers */}
+        <div className="space-y-3 pt-1 text-xs">
+          {/* Top Row: Search & Office Selection */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Search Input */}
+            <div>
+              <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
+                Search Office / Remarks (تلاش کریں)
               </label>
-              {fromDate && (
-                <span className="text-[9px] font-mono text-[#006633] font-bold">
-                  {formatDatePK(fromDate)}
-                </span>
-              )}
-            </div>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => {
-                setFromDate(e.target.value);
-                setFilterDate('');
-                setSelectedMonth('');
-                setDatePreset('custom');
-              }}
-              className="w-full bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
-            />
-          </div>
-
-          {/* 3. To Date Filter (DD/MM/YYYY) */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[10px] font-bold text-gray-600 uppercase">
-                3. To Date (تا تاریخ)
-              </label>
-              {toDate && (
-                <span className="text-[9px] font-mono text-[#006633] font-bold">
-                  {formatDatePK(toDate)}
-                </span>
-              )}
-            </div>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => {
-                setToDate(e.target.value);
-                setFilterDate('');
-                setSelectedMonth('');
-                setDatePreset('custom');
-              }}
-              className="w-full bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
-            />
-          </div>
-
-          {/* 4. Month Selector Filter */}
-          <div>
-            <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
-              4. Specific Month
-            </label>
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => {
-                setSelectedMonth(e.target.value);
-                setFilterDate('');
-                setFromDate('');
-                setToDate('');
-                setDatePreset('custom');
-              }}
-              className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
-            />
-          </div>
-
-          {/* 5. Sorting System Selection */}
-          <div>
-            <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1 flex items-center space-x-1">
-              <SlidersHorizontal className="w-3 h-3 text-[#006633]" />
-              <span>5. Sorting System</span>
-            </label>
-            <select
-              value={`${sortField}-${sortOrder}`}
-              onChange={(e) => {
-                const [f, o] = e.target.value.split('-');
-                setSortField(f as SortField);
-                setSortOrder(o as 'asc' | 'desc');
-              }}
-              className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
-            >
-              <option value="date-desc">Date (Newest First ↓)</option>
-              <option value="date-asc">Date (Oldest First ↑)</option>
-              <option value="officeName-asc">Office Name (A → Z)</option>
-              <option value="officeName-desc">Office Name (Z → A)</option>
-              <option value="receivedToday-desc">Received (Highest First ↓)</option>
-              <option value="delivered-desc">Delivered (Highest First ↓)</option>
-              <option value="rate-desc">Delivery Rate % (Highest ↓)</option>
-              <option value="deposit-desc">Deposit / In-Hand (Highest ↓)</option>
-              <option value="returnedToSender-desc">Returned RTS (Highest ↓)</option>
-            </select>
-          </div>
-
-          {/* 6. Search Box */}
-          <div>
-            <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
-              6. Search Remarks
-            </label>
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
               <input
                 type="text"
-                placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-white border border-gray-300 text-gray-900 text-xs rounded-lg pl-8 pr-2 p-2 focus:ring-2 focus:ring-[#006633]"
+                placeholder="Search by office name or remarks..."
+                className="w-full bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2.5 focus:ring-2 focus:ring-[#006633]"
               />
             </div>
+
+            {/* Office Wise Selection Filter */}
+            <div>
+              <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1 flex items-center space-x-1">
+                <Building2 className="w-3.5 h-3.5 text-[#006633]" />
+                <span>Office Wise (ڈاکخانہ منتخب کریں)</span>
+              </label>
+              <select
+                value={filterOffice}
+                onChange={(e) => setFilterOffice(e.target.value)}
+                className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2.5 focus:ring-2 focus:ring-[#006633]"
+              >
+                <option value="">All Post Offices ({officeOptions.length})</option>
+                {officeOptions.map((name) => {
+                  const count = reports.filter((r) => r.officeName === name).length;
+                  return (
+                    <option key={name} value={name}>
+                      {name} ({count} reports)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          {/* Bottom Row: Date Filter Mode Tabs & Date Inputs */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200 pb-2">
+              <span className="text-[11px] font-extrabold text-gray-800 uppercase tracking-wide flex items-center space-x-1.5">
+                <Calendar className="w-4 h-4 text-[#006633]" />
+                <span>Date Filter Selection (تاریخ فلٹر)</span>
+              </span>
+
+              {/* Filter Mode Selector */}
+              <div className="inline-flex bg-white p-0.5 rounded-lg border border-gray-300 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFilterMode('single');
+                    if (!singleDate) setSingleDate(today);
+                  }}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                    dateFilterMode === 'single'
+                      ? 'bg-[#00401A] text-white shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  📅 Single Date (مخصوص تاریخ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode('range')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                    dateFilterMode === 'range'
+                      ? 'bg-[#00401A] text-white shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  📆 Date Range (از تاریخ تا تاریخ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode('all')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                    dateFilterMode === 'all'
+                      ? 'bg-[#00401A] text-white shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  📋 All Dates (تمام)
+                </button>
+              </div>
+            </div>
+
+            {/* Mode 1: Single Date Picker */}
+            {dateFilterMode === 'single' && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-gray-700 uppercase">
+                      Select Specific Report Date (مخصوص تاریخ منتخب کریں):
+                    </label>
+                    {singleDate && (
+                      <span className="text-[10px] font-mono text-[#006633] font-bold bg-green-100 px-2 py-0.5 rounded">
+                        Selected: {formatDatePK(singleDate)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={singleDate}
+                      onChange={(e) => setSingleDate(e.target.value)}
+                      className="flex-1 bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSingleDate(today)}
+                      className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
+                        singleDate === today
+                          ? 'bg-[#00401A] text-white'
+                          : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-300'
+                      }`}
+                      title="Set to Today"
+                    >
+                      آج (Today)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() - 1);
+                        setSingleDate(d.toISOString().slice(0, 10));
+                      }}
+                      className="px-3 py-2 rounded-lg text-xs font-bold bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 transition-colors"
+                      title="Set to Yesterday"
+                    >
+                      گزشتہ روز (Yesterday)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mode 2: Date Range Pickers (From / To) */}
+            {dateFilterMode === 'range' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-gray-700 uppercase">
+                      From Date (از تاریخ)
+                    </label>
+                    {fromDate && (
+                      <span className="text-[9px] font-mono text-[#006633] font-bold">
+                        {formatDatePK(fromDate)}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-gray-700 uppercase">
+                      To Date (تا تاریخ)
+                    </label>
+                    {toDate && (
+                      <span className="text-[9px] font-mono text-[#006633] font-bold">
+                        {formatDatePK(toDate)}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Mode 3: All Dates Notice */}
+            {dateFilterMode === 'all' && (
+              <div className="text-xs text-gray-500 italic py-1">
+                Displaying all dates available in the system. Use the tabs above to filter by a specific single date or date range.
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Office Wise / Date-to-Date Performance Executive Summary Card */}
-      {(filterOffice || fromDate || toDate || selectedMonth || datePreset !== 'all') && (
-        <div className="bg-[#00401A] text-white p-4 rounded-lg shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 border border-[#005522]">
+      {/* Office Wise & Date Range Executive Summary Card with Delivery Rate % */}
+      {(filterOffice || (dateFilterMode === 'single' && singleDate) || (dateFilterMode === 'range' && (fromDate || toDate))) && (
+        <div className="bg-[#00401A] text-white p-4 rounded-lg shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 border border-[#005522] no-print">
           <div>
             <div className="flex items-center space-x-2">
               <Building2 className="w-4 h-4 text-emerald-300" />
               <h3 className="font-extrabold text-sm uppercase tracking-wide text-white">
-                {filterOffice ? `${filterOffice} — Performance Report` : 'Gujranwala Division — Range Summary'}
+                {filterOffice ? `${filterOffice} — Delivery Summary` : 'Gujranwala Division — Range Summary'}
               </h3>
               <span className="bg-emerald-800 text-white text-[10px] font-bold px-2 py-0.5 rounded">
                 {sortedReports.length} Reports
@@ -588,7 +547,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
             </div>
             <p className="text-xs text-emerald-100 mt-1">
               Period:{' '}
-              <strong className="text-white bg-black/20 px-1.5 py-0.5 rounded">
+              <strong className="text-white bg-black/20 px-1.5 py-0.5 rounded font-mono">
                 {getPeriodLabel()}
               </strong>{' '}
               {filterOffice && (
@@ -599,39 +558,46 @@ export const ReportsList: React.FC<ReportsListProps> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
+            <div className="bg-white/10 p-2 rounded border border-white/20">
+              <span className="text-[10px] text-emerald-200 block font-semibold uppercase">Last Bal</span>
+              <strong className="text-sm font-bold text-white font-mono">{formatNumber(summaryTotals.lastBalance)}</strong>
+            </div>
             <div className="bg-white/10 p-2 rounded border border-white/20">
               <span className="text-[10px] text-emerald-200 block font-semibold uppercase">Received</span>
-              <strong className="text-sm font-bold text-white">{formatNumber(summaryTotals.received)}</strong>
+              <strong className="text-sm font-bold text-white font-mono">{formatNumber(summaryTotals.received)}</strong>
             </div>
             <div className="bg-white/10 p-2 rounded border border-white/20">
               <span className="text-[10px] text-emerald-200 block font-semibold uppercase">Delivered</span>
-              <strong className="text-sm font-bold text-emerald-300">{formatNumber(summaryTotals.delivered)}</strong>
+              <strong className="text-sm font-bold text-emerald-300 font-mono">{formatNumber(summaryTotals.delivered)}</strong>
+            </div>
+            <div className="bg-emerald-800/80 p-2 rounded border border-emerald-400">
+              <span className="text-[10px] text-yellow-200 block font-bold uppercase flex items-center justify-center space-x-0.5">
+                <Percent className="w-3 h-3" />
+                <span>Deliv. %</span>
+              </span>
+              <strong className="text-base font-black text-amber-300 font-mono">{deliveryRate}%</strong>
             </div>
             <div className="bg-white/10 p-2 rounded border border-white/20">
               <span className="text-[10px] text-emerald-200 block font-semibold uppercase">Returned</span>
-              <strong className="text-sm font-bold text-red-300">{formatNumber(summaryTotals.returned)}</strong>
+              <strong className="text-sm font-bold text-red-300 font-mono">{formatNumber(summaryTotals.returned)}</strong>
             </div>
             <div className="bg-white/10 p-2 rounded border border-white/20">
               <span className="text-[10px] text-emerald-200 block font-semibold uppercase">Deposit</span>
-              <strong className="text-sm font-bold text-blue-300">{formatNumber(summaryTotals.deposit)}</strong>
-            </div>
-            <div className="bg-white/10 p-2 rounded border border-white/20">
-              <span className="text-[10px] text-emerald-200 block font-semibold uppercase">Deliv. Rate</span>
-              <strong className="text-sm font-bold text-amber-300">{deliveryRate}%</strong>
+              <strong className="text-sm font-bold text-blue-300 font-mono">{formatNumber(summaryTotals.deposit)}</strong>
             </div>
           </div>
         </div>
       )}
 
-      {/* Reports Table with Clickable Sortable Columns */}
+      {/* Reports Table with Delivery Percentage in every row and totals */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
         {sortedReports.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-gray-50 text-gray-700 font-bold uppercase tracking-wider border-b border-gray-200 text-[10px]">
                 <tr>
-                  {/* Sortable Date Header (DD/MM/YYYY) */}
+                  {/* Date (DD/MM/YYYY) */}
                   <th
                     onClick={() => handleSortToggle('date')}
                     className="p-2.5 cursor-pointer hover:bg-gray-100 transition-colors select-none"
@@ -646,12 +612,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                           <ArrowDown className="w-3 h-3 text-[#006633]" />
                         )
                       ) : (
-                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50" />
+                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50 no-print" />
                       )}
                     </div>
                   </th>
 
-                  {/* Sortable Office Name */}
+                  {/* Office Name */}
                   <th
                     onClick={() => handleSortToggle('officeName')}
                     className="p-2.5 cursor-pointer hover:bg-gray-100 transition-colors select-none"
@@ -666,12 +632,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                           <ArrowDown className="w-3 h-3 text-[#006633]" />
                         )
                       ) : (
-                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50" />
+                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50 no-print" />
                       )}
                     </div>
                   </th>
 
-                  {/* Sortable Last Balance */}
+                  {/* Last Balance */}
                   <th
                     onClick={() => handleSortToggle('lastBalance')}
                     className="p-2.5 text-right cursor-pointer hover:bg-gray-100 transition-colors select-none"
@@ -685,7 +651,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                     </div>
                   </th>
 
-                  {/* Sortable Received */}
+                  {/* Received */}
                   <th
                     onClick={() => handleSortToggle('receivedToday')}
                     className="p-2.5 text-right cursor-pointer hover:bg-gray-100 transition-colors select-none"
@@ -696,12 +662,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                       {sortField === 'receivedToday' ? (
                         sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
                       ) : (
-                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50" />
+                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50 no-print" />
                       )}
                     </div>
                   </th>
 
-                  {/* Sortable Delivered */}
+                  {/* Delivered */}
                   <th
                     onClick={() => handleSortToggle('delivered')}
                     className="p-2.5 text-right cursor-pointer hover:bg-gray-100 transition-colors select-none"
@@ -712,12 +678,28 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                       {sortField === 'delivered' ? (
                         sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
                       ) : (
-                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50" />
+                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50 no-print" />
                       )}
                     </div>
                   </th>
 
-                  {/* Sortable Returned */}
+                  {/* Delivery Percentage Column */}
+                  <th
+                    onClick={() => handleSortToggle('rate')}
+                    className="p-2.5 text-right cursor-pointer hover:bg-gray-100 transition-colors select-none bg-emerald-50/50"
+                    title="Click to sort by Delivery %"
+                  >
+                    <div className="flex items-center justify-end space-x-1 text-[#006633] font-black">
+                      <span>Delivery %</span>
+                      {sortField === 'rate' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50 no-print" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Returned */}
                   <th
                     onClick={() => handleSortToggle('returnedToSender')}
                     className="p-2.5 text-right cursor-pointer hover:bg-gray-100 transition-colors select-none"
@@ -731,7 +713,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                     </div>
                   </th>
 
-                  {/* Sortable Missent */}
+                  {/* Missent */}
                   <th
                     onClick={() => handleSortToggle('missent')}
                     className="p-2.5 text-right cursor-pointer hover:bg-gray-100 transition-colors select-none"
@@ -745,7 +727,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                     </div>
                   </th>
 
-                  {/* Sortable Deposit */}
+                  {/* Deposit */}
                   <th
                     onClick={() => handleSortToggle('deposit')}
                     className="p-2.5 text-right cursor-pointer hover:bg-gray-100 transition-colors select-none"
@@ -756,7 +738,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                       {sortField === 'deposit' ? (
                         sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
                       ) : (
-                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50" />
+                        <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-50 no-print" />
                       )}
                     </div>
                   </th>
@@ -774,8 +756,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({
 
                   const rowRate =
                     report.receivedToday > 0
-                      ? ((report.delivered / report.receivedToday) * 100).toFixed(0)
-                      : '0';
+                      ? ((report.delivered / report.receivedToday) * 100).toFixed(1)
+                      : '0.0';
 
                   return (
                     <tr key={report.id} className="hover:bg-gray-50/80 transition-colors">
@@ -790,8 +772,19 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                         {formatNumber(report.receivedToday)}
                       </td>
                       <td className="p-2.5 text-right text-emerald-700 font-semibold font-mono">
-                        <span>{formatNumber(report.delivered)}</span>
-                        <span className="text-[10px] text-gray-400 ml-1">({rowRate}%)</span>
+                        {formatNumber(report.delivered)}
+                      </td>
+                      {/* Delivery Percentage Cell */}
+                      <td className="p-2.5 text-right font-black font-mono">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] ${
+                          Number(rowRate) >= 90
+                            ? 'bg-green-100 text-[#006633]'
+                            : Number(rowRate) >= 70
+                            ? 'bg-yellow-100 text-amber-800'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {rowRate}%
+                        </span>
                       </td>
                       <td className="p-2.5 text-right text-red-600 font-semibold font-mono">{formatNumber(report.returnedToSender)}</td>
                       <td className="p-2.5 text-right text-amber-600 font-semibold font-mono">{formatNumber(report.missent)}</td>
@@ -830,9 +823,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                   <td colSpan={2} className="p-2.5 text-left uppercase text-[11px]">
                     Total Summary ({sortedReports.length} Reports)
                   </td>
-                  <td className="p-2.5 text-right font-mono">-</td>
+                  <td className="p-2.5 text-right font-mono">{formatNumber(summaryTotals.lastBalance)}</td>
                   <td className="p-2.5 text-right text-[#006633] font-mono">{formatNumber(summaryTotals.received)}</td>
                   <td className="p-2.5 text-right text-emerald-800 font-mono">{formatNumber(summaryTotals.delivered)}</td>
+                  <td className="p-2.5 text-right text-[#006633] font-mono font-black text-xs">
+                    {deliveryRate}%
+                  </td>
                   <td className="p-2.5 text-right text-red-700 font-mono">{formatNumber(summaryTotals.returned)}</td>
                   <td className="p-2.5 text-right text-amber-700 font-mono">{formatNumber(summaryTotals.missent)}</td>
                   <td className="p-2.5 text-right text-blue-700 font-mono">{formatNumber(summaryTotals.deposit)}</td>
@@ -845,12 +841,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({
           <div className="p-12 text-center text-gray-400 text-xs">
             <FileSpreadsheet className="w-10 h-10 mx-auto mb-2 opacity-30 text-gray-500" />
             <p className="font-bold text-gray-600">No Daily Reports Found</p>
-            <p className="mt-1">Try adjusting search filters or selecting another post office.</p>
+            <p className="mt-1">Try adjusting the Office or Date filters.</p>
           </div>
         )}
       </div>
 
-      {/* Official Signatures for Print Dialog */}
+      {/* Official Signatures Block for A4 Print */}
       <div className="print-only-block hidden pt-8 mt-6">
         <div className="flex justify-between items-end text-xs">
           <div className="text-center w-60 border-t border-black pt-1 font-bold">
@@ -866,4 +862,3 @@ export const ReportsList: React.FC<ReportsListProps> = ({
     </div>
   );
 };
-

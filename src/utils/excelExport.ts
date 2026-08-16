@@ -4,20 +4,32 @@ import { formatDatePK, summarizeReports } from './calculations';
 
 export function exportDailyReportsToExcel(reports: DailyReport[], filename: string = 'Pakistan_Post_Daily_Reports') {
   const totals = summarizeReports(reports);
+  const grandDeliveryRate =
+    totals.totalReceived > 0
+      ? `${((totals.totalDelivered / totals.totalReceived) * 100).toFixed(1)}%`
+      : '0.0%';
 
-  const data = reports.map((r, index) => ({
-    'S.No': index + 1,
-    'Date': formatDatePK(r.date),
-    'Office Name': r.officeName,
-    'Last Balance': r.lastBalance,
-    'Articles Received': r.receivedToday,
-    'Delivered': r.delivered,
-    'Returned to Sender': r.returnedToSender,
-    'Missent': r.missent,
-    'Deposit': r.deposit,
-    'Remarks': r.remarks || 'N/A',
-    'Submitted At': r.submittedAt,
-  }));
+  const data = reports.map((r, index) => {
+    const rowDeliveryRate =
+      r.receivedToday > 0
+        ? `${((r.delivered / r.receivedToday) * 100).toFixed(1)}%`
+        : '0.0%';
+
+    return {
+      'S.No': index + 1,
+      'Date': formatDatePK(r.date),
+      'Office Name': r.officeName,
+      'Last Balance': r.lastBalance,
+      'Articles Received': r.receivedToday,
+      'Delivered': r.delivered,
+      'Delivery %': rowDeliveryRate,
+      'Returned to Sender': r.returnedToSender,
+      'Missent': r.missent,
+      'Deposit': r.deposit,
+      'Remarks': r.remarks || 'N/A',
+      'Submitted At': r.submittedAt,
+    };
+  });
 
   // Add Grand Totals Row
   data.push({
@@ -27,6 +39,7 @@ export function exportDailyReportsToExcel(reports: DailyReport[], filename: stri
     'Last Balance': totals.totalLastBalance,
     'Articles Received': totals.totalReceived,
     'Delivered': totals.totalDelivered,
+    'Delivery %': grandDeliveryRate,
     'Returned to Sender': totals.totalReturned,
     'Missent': totals.totalMissent,
     'Deposit': totals.totalDeposit,

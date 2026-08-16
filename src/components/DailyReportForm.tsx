@@ -7,7 +7,7 @@ import {
   getTodayDateString,
   formatDatePK,
 } from '../utils/calculations';
-import { AlertCircle, CheckCircle2, Calculator, Save, FileText, Calendar } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Calculator, Save, FileText } from 'lucide-react';
 
 interface DailyReportFormProps {
   currentUser: User | null;
@@ -262,148 +262,28 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         {/* Section 1: Date & Post Office Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-gray-700 flex items-center space-x-1">
-                <span>Report Date (تاریخ) *</span>
-                <span className="text-[10px] text-[#006633] font-extrabold bg-green-100 px-1.5 py-0.5 rounded">
-                  DD / MM / YYYY
-                </span>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-gray-700">
+                Report Date * <span className="text-[#006633] font-semibold">(DD/MM/YYYY)</span>
               </label>
               {!editingReport && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const d = new Date();
-                      d.setDate(d.getDate() - 1);
-                      const y = d.getFullYear();
-                      const m = String(d.getMonth() + 1).padStart(2, '0');
-                      const day = String(d.getDate()).padStart(2, '0');
-                      setDate(`${y}-${m}-${day}`);
-                    }}
-                    className="text-[10px] text-gray-600 hover:text-gray-900 hover:underline font-bold"
-                  >
-                    Yesterday
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => setDate(getTodayDateString())}
-                    className="text-[10px] text-[#006633] hover:underline font-bold"
-                  >
-                    Today ({formatDatePK(getTodayDateString())})
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setDate(getTodayDateString())}
+                  className="text-[10px] text-[#006633] hover:underline font-bold"
+                >
+                  Today ({formatDatePK(getTodayDateString())})
+                </button>
               )}
             </div>
-
-            {/* DD / MM / YYYY Segments Layout */}
-            {(() => {
-              const parts = (date || '2026-08-15').split('-');
-              const curYear = parts[0] || '2026';
-              const curMonth = parts[1] || '08';
-              const curDay = parts[2] || '15';
-
-              const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
-              const monthsList = [
-                { val: '01', label: '01 - Jan (جنوری)' },
-                { val: '02', label: '02 - Feb (فروری)' },
-                { val: '03', label: '03 - Mar (مارچ)' },
-                { val: '04', label: '04 - Apr (اپریل)' },
-                { val: '05', label: '05 - May (مئی)' },
-                { val: '06', label: '06 - Jun (جون)' },
-                { val: '07', label: '07 - Jul (جولائی)' },
-                { val: '08', label: '08 - Aug (اگست)' },
-                { val: '09', label: '09 - Sep (ستمبر)' },
-                { val: '10', label: '10 - Oct (اکتوبر)' },
-                { val: '11', label: '11 - Nov (نومبر)' },
-                { val: '12', label: '12 - Dec (دسمبر)' },
-              ];
-              const yearsList = ['2024', '2025', '2026', '2027', '2028', '2029', '2030'];
-
-              return (
-                <div className="space-y-1.5">
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {/* 1. Day First (DD) */}
-                    <div>
-                      <span className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                        1. Day (دن / تاریخ)
-                      </span>
-                      <select
-                        value={curDay}
-                        onChange={(e) => setDate(`${curYear}-${curMonth}-${e.target.value}`)}
-                        disabled={Boolean(editingReport)}
-                        className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
-                      >
-                        {days.map((d) => (
-                          <option key={d} value={d}>
-                            {d}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* 2. Month Second (MM) */}
-                    <div>
-                      <span className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                        2. Month (مہینہ)
-                      </span>
-                      <select
-                        value={curMonth}
-                        onChange={(e) => setDate(`${curYear}-${e.target.value}-${curDay}`)}
-                        disabled={Boolean(editingReport)}
-                        className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
-                      >
-                        {monthsList.map((m) => (
-                          <option key={m.val} value={m.val}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* 3. Year Third (YYYY) */}
-                    <div>
-                      <span className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                        3. Year (سال)
-                      </span>
-                      <select
-                        value={curYear}
-                        onChange={(e) => setDate(`${e.target.value}-${curMonth}-${curDay}`)}
-                        disabled={Boolean(editingReport)}
-                        className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-2 focus:ring-[#006633]"
-                      >
-                        {yearsList.map((y) => (
-                          <option key={y} value={y}>
-                            {y}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Hidden / Sync native picker helper */}
-                  <div className="flex items-center justify-between text-[10px] bg-white border border-gray-200 px-2.5 py-1.5 rounded-md text-gray-600">
-                    <span className="font-medium flex items-center space-x-1">
-                      <span className="text-gray-400">تاریخ:</span>
-                      <strong className="text-[#006633] text-xs font-mono">{formatDatePK(date)}</strong>
-                      <span className="text-gray-500">(Day-Month-Year)</span>
-                    </span>
-                    <label className="cursor-pointer text-[#006633] hover:underline font-bold flex items-center space-x-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>Calendar Picker</span>
-                      <input
-                        type="date"
-                        value={date}
-                        onChange={(e) => e.target.value && setDate(e.target.value)}
-                        disabled={Boolean(editingReport)}
-                        className="sr-only"
-                      />
-                    </label>
-                  </div>
-                </div>
-              );
-            })()}
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              disabled={Boolean(editingReport)}
+              className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
+              required
+            />
           </div>
 
           <div>

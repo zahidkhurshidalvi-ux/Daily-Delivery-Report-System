@@ -139,36 +139,49 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
           </div>
 
           {/* Document Summary Box */}
-          <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-4 mb-6 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-center text-xs">
-            <div>
-              <span className="text-[10px] text-slate-500 block font-semibold">Offices</span>
-              <strong className="text-emerald-900 text-sm font-bold">{dateReports.length}</strong>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block font-semibold">Last Bal</span>
-              <strong className="text-slate-800">{formatNumber(totals.totalLastBalance)}</strong>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block font-semibold">Received</span>
-              <strong className="text-emerald-700">{formatNumber(totals.totalReceived)}</strong>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block font-semibold">Delivered</span>
-              <strong className="text-emerald-700">{formatNumber(totals.totalDelivered)}</strong>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block font-semibold">Returned</span>
-              <strong className="text-rose-700">{formatNumber(totals.totalReturned)}</strong>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block font-semibold">Missent</span>
-              <strong className="text-amber-700">{formatNumber(totals.totalMissent)}</strong>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block font-semibold">Deposit</span>
-              <strong className="text-blue-700">{formatNumber(totals.totalDeposit)}</strong>
-            </div>
-          </div>
+          {(() => {
+            const grandRate =
+              totals.totalReceived > 0
+                ? ((totals.totalDelivered / totals.totalReceived) * 100).toFixed(1)
+                : '0.0';
+
+            return (
+              <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-4 mb-6 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-center text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Offices</span>
+                  <strong className="text-emerald-900 text-sm font-bold">{dateReports.length}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Last Bal</span>
+                  <strong className="text-slate-800">{formatNumber(totals.totalLastBalance)}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Received</span>
+                  <strong className="text-emerald-700">{formatNumber(totals.totalReceived)}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Delivered</span>
+                  <strong className="text-emerald-700">{formatNumber(totals.totalDelivered)}</strong>
+                </div>
+                <div className="bg-emerald-100/60 rounded p-1">
+                  <span className="text-[10px] text-emerald-900 block font-bold">Delivery %</span>
+                  <strong className="text-[#006633] text-sm font-black">{grandRate}%</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Returned</span>
+                  <strong className="text-rose-700">{formatNumber(totals.totalReturned)}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Missent</span>
+                  <strong className="text-amber-700">{formatNumber(totals.totalMissent)}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Deposit</span>
+                  <strong className="text-blue-700">{formatNumber(totals.totalDeposit)}</strong>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Document Table */}
           {dateReports.length > 0 ? (
@@ -181,6 +194,7 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                     <th className="p-2 border border-emerald-800 text-right">Last Bal</th>
                     <th className="p-2 border border-emerald-800 text-right">Received</th>
                     <th className="p-2 border border-emerald-800 text-right">Delivered</th>
+                    <th className="p-2 border border-emerald-800 text-right">Deliv %</th>
                     <th className="p-2 border border-emerald-800 text-right">Returned</th>
                     <th className="p-2 border border-emerald-800 text-right">Missent</th>
                     <th className="p-2 border border-emerald-800 text-right">Deposit</th>
@@ -190,6 +204,11 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                 <tbody className="divide-y divide-slate-200">
                   {dateReports.map((r, idx) => {
                     const isMissing = r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted');
+                    const rowRate =
+                      r.receivedToday > 0
+                        ? `${((r.delivered / r.receivedToday) * 100).toFixed(0)}%`
+                        : '0%';
+
                     return (
                       <tr
                         key={r.id}
@@ -205,8 +224,11 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                         <td className="p-2 border border-slate-200 text-right font-semibold text-emerald-800">
                           {formatNumber(r.receivedToday)}
                         </td>
-                        <td className="p-2 border border-slate-200 text-right text-emerald-700">
+                        <td className="p-2 border border-slate-200 text-right text-emerald-700 font-semibold">
                           {formatNumber(r.delivered)}
+                        </td>
+                        <td className="p-2 border border-slate-200 text-right font-bold text-[#006633]">
+                          {rowRate}
                         </td>
                         <td className="p-2 border border-slate-200 text-right text-rose-700">
                           {formatNumber(r.returnedToSender)}
@@ -230,29 +252,41 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                     );
                   })}
                   {/* Grand Totals */}
-                  <tr className="bg-[#e1eee4] text-[#006633] font-black border-2 border-[#006633]">
-                    <td className="p-2 border border-emerald-300"></td>
-                    <td className="p-2 border border-emerald-300">GRAND TOTALS</td>
-                    <td className="p-2 border border-emerald-300 text-right">
-                      {formatNumber(totals.totalLastBalance)}
-                    </td>
-                    <td className="p-2 border border-emerald-300 text-right">
-                      {formatNumber(totals.totalReceived)}
-                    </td>
-                    <td className="p-2 border border-emerald-300 text-right">
-                      {formatNumber(totals.totalDelivered)}
-                    </td>
-                    <td className="p-2 border border-emerald-300 text-right">
-                      {formatNumber(totals.totalReturned)}
-                    </td>
-                    <td className="p-2 border border-emerald-300 text-right">
-                      {formatNumber(totals.totalMissent)}
-                    </td>
-                    <td className="p-2 border border-emerald-300 text-right">
-                      {formatNumber(totals.totalDeposit)}
-                    </td>
-                    <td className="p-2 border border-emerald-300"></td>
-                  </tr>
+                  {(() => {
+                    const grandRate =
+                      totals.totalReceived > 0
+                        ? `${((totals.totalDelivered / totals.totalReceived) * 100).toFixed(1)}%`
+                        : '0.0%';
+
+                    return (
+                      <tr className="bg-[#e1eee4] text-[#006633] font-black border-2 border-[#006633]">
+                        <td className="p-2 border border-emerald-300"></td>
+                        <td className="p-2 border border-emerald-300">GRAND TOTALS</td>
+                        <td className="p-2 border border-emerald-300 text-right">
+                          {formatNumber(totals.totalLastBalance)}
+                        </td>
+                        <td className="p-2 border border-emerald-300 text-right">
+                          {formatNumber(totals.totalReceived)}
+                        </td>
+                        <td className="p-2 border border-emerald-300 text-right">
+                          {formatNumber(totals.totalDelivered)}
+                        </td>
+                        <td className="p-2 border border-emerald-300 text-right font-black text-[#00401A]">
+                          {grandRate}
+                        </td>
+                        <td className="p-2 border border-emerald-300 text-right">
+                          {formatNumber(totals.totalReturned)}
+                        </td>
+                        <td className="p-2 border border-emerald-300 text-right">
+                          {formatNumber(totals.totalMissent)}
+                        </td>
+                        <td className="p-2 border border-emerald-300 text-right">
+                          {formatNumber(totals.totalDeposit)}
+                        </td>
+                        <td className="p-2 border border-emerald-300"></td>
+                      </tr>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>

@@ -15,6 +15,7 @@ import {
 export type NavTab =
   | 'dashboard'
   | 'daily-reports'
+  | 'admin-reports'
   | 'pending-reports'
   | 'google-sheets'
   | 'pdf-exports'
@@ -41,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard, role: 'ADMIN' },
     { id: 'daily-reports', label: 'Submit Daily Report', icon: FileSpreadsheet, role: 'ALL' },
+    { id: 'admin-reports', label: 'Summary & Reports (Admin)', icon: FileSpreadsheet, role: 'ADMIN' },
     {
       id: 'pending-reports',
       label: 'Pending Offices',
@@ -108,24 +110,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
       </div>
 
-      {/* Footer Info / Admin Login Trigger */}
-      <div className="p-3.5 border-t border-[#005522] text-xs space-y-2">
+      {/* Footer Info */}
+      <div className="p-3.5 border-t border-[#005522] text-xs space-y-1">
         <div className="text-[10px] text-green-300/80 uppercase font-semibold tracking-wider">
           ACCESS MODE
         </div>
         <div className="text-xs font-extrabold text-white truncate">
-          {userRole === 'ADMIN' ? 'Divisional Superintendent' : 'Post Office Direct (No Login)'}
+          {userRole === 'ADMIN' ? 'Divisional Superintendent' : 'Post Office Direct Portal'}
         </div>
-
-        {userRole !== 'ADMIN' && (
-          <button
-            onClick={onOpenAdminLogin}
-            className="w-full mt-2 bg-yellow-400 hover:bg-yellow-300 text-slate-950 text-[11px] font-bold py-1.5 px-3 rounded flex items-center justify-center space-x-1.5 shadow-xs transition-colors"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>Superintendent Admin Login</span>
-          </button>
-        )}
       </div>
     </aside>
   );

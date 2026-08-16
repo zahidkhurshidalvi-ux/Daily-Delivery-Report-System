@@ -4,7 +4,7 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm 12mm;
+    margin: 8mm 10mm;
   }
 
   /* Hide UI elements that are irrelevant during printing */
@@ -21,7 +21,8 @@
   }
 
   /* Reveal print-only elements */
-  .print-only-header {
+  .print-only-header,
+  .print-only-block {
     display: block !important;
   }
 
@@ -29,11 +30,11 @@
   body {
     background: #ffffff !important;
     color: #000000 !important;
-    font-size: 10pt !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    font-size: 9pt !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
     margin: 0 !important;
     padding: 0 !important;
-    line-height: 1.3 !important;
+    line-height: 1.25 !important;
   }
 
   main {
@@ -53,22 +54,22 @@
     background-color: transparent !important;
     color: #000000 !important;
     box-shadow: none !important;
-    border-color: #94a3b8 !important;
+    border-color: #334155 !important;
   }
 
   /* High-Contrast Crisp Tables */
   table {
     width: 100% !important;
     border-collapse: collapse !important;
-    font-size: 9.5pt !important;
-    margin-top: 8px !important;
-    margin-bottom: 12px !important;
+    font-size: 8.5pt !important;
+    margin-top: 6px !important;
+    margin-bottom: 10px !important;
   }
 
   th,
   td {
-    border: 1px solid #475569 !important;
-    padding: 5px 7px !important;
+    border: 1px solid #334155 !important;
+    padding: 4px 6px !important;
     color: #000000 !important;
   }
 
@@ -76,7 +77,14 @@
     background-color: #f1f5f9 !important;
     font-weight: 800 !important;
     text-transform: uppercase !important;
-    font-size: 8.5pt !important;
+    font-size: 8pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tfoot td {
+    background-color: #e2e8f0 !important;
+    font-weight: 800 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -90,6 +98,7 @@
   .text-gray-900,
   .text-gray-800,
   .text-gray-700,
+  .text-gray-600,
   .text-[#006633],
   .text-emerald-700,
   .text-emerald-800,

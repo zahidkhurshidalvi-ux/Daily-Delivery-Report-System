@@ -393,22 +393,25 @@ export default function App() {
                 editingReport={editingReport}
                 onCancelEdit={() => setEditingReport(null)}
               />
-
-              {/* Reports Archive Table - Reserved for Admin */}
-              {currentUser?.role === 'ADMIN' && (
-                <ReportsList
-                  reports={reports}
-                  postOffices={postOffices}
-                  currentUser={currentUser}
-                  onEditReport={(rep) => {
-                    setEditingReport(rep);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  onDeleteReport={handleDeleteReport}
-                  onOpenNewReport={() => setEditingReport(null)}
-                />
-              )}
             </div>
+          )}
+
+          {activeTab === 'admin-reports' && currentUser?.role === 'ADMIN' && (
+            <ReportsList
+              reports={reports}
+              postOffices={postOffices}
+              currentUser={currentUser}
+              onEditReport={(rep) => {
+                setEditingReport(rep);
+                setActiveTab('daily-reports');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onDeleteReport={handleDeleteReport}
+              onOpenNewReport={() => {
+                setEditingReport(null);
+                setActiveTab('daily-reports');
+              }}
+            />
           )}
 
           {activeTab === 'pending-reports' && (
