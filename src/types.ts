@@ -86,5 +86,11 @@ export interface GoogleSheetsConfig {
   customClientId?: string;
   userEmail?: string;
   sheetName?: string;
+  dbInitialized?: boolean;
+  autoPullOnLoad?: boolean;
+  liveSyncOffices?: boolean;
+  liveSyncReports?: boolean;
+  liveSyncUsers?: boolean;
+  liveSyncConfig?: boolean;
 }
 

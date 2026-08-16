@@ -22,7 +22,15 @@ import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
 import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
 import { getTodayDateString, calculateClosingBalance } from './utils/calculations';
-import { dispatchReportSync, dispatchReportDelete, dispatchReportBulkSync } from './utils/googleSheets';
+import {
+  dispatchReportSync,
+  dispatchReportDelete,
+  dispatchReportBulkSync,
+  dispatchOfficesSync,
+  fetchFullDatabaseFromGoogleSheet,
+  fetchDatabaseViaWebhook,
+  getGoogleAccessToken,
+} from './utils/googleSheets';
 
 export default function App() {
   const today = getTodayDateString();
@@ -71,11 +79,11 @@ export default function App() {
   const [logs, setLogs] = useState<SystemLog[]>([
     {
       id: 'log-1',
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toLocaleString(),
       user: 'admin',
       role: 'ADMIN',
       action: 'SYSTEM_BOOT',
-      details: 'Pakistan Post Daily Delivery Reporting System initialized.',
+      details: 'Pakistan Post Daily Delivery Reporting System & Google Sheets Database initialized.',
       type: 'INFO',
     },
   ]);
@@ -93,7 +101,99 @@ export default function App() {
   });
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(new Date());
 
-  const handleRefreshData = () => {
+  // Logging Helper
+  const logAction = (action: string, details: string, type: 'INFO' | 'WARNING' | 'SUCCESS' | 'ERROR' = 'INFO') => {
+    const newLog: SystemLog = {
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toLocaleString(),
+      user: currentUser ? currentUser.username : 'SYSTEM',
+      role: currentUser ? currentUser.role : 'GUEST',
+      action,
+      details,
+      type,
+    };
+    setLogs((prev) => [newLog, ...prev]);
+  };
+
+  // Full Database State Replacement Handler (from Google Sheets Pull)
+  const handleUpdateAllDatabase = (data: {
+    reports?: DailyReport[];
+    postOffices?: PostOffice[];
+    users?: User[];
+    whatsAppConfig?: WhatsAppConfig;
+    triggerConfig?: TriggerConfig;
+  }) => {
+    if (data.reports) setReports(data.reports);
+    if (data.postOffices) {
+      setPostOffices(
+        [...data.postOffices].sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+        )
+      );
+    }
+    if (data.users) setUsers(data.users);
+    if (data.whatsAppConfig) setWhatsAppConfig(data.whatsAppConfig);
+    if (data.triggerConfig) setTriggerConfig(data.triggerConfig);
+    logAction('DATABASE_UPDATED', 'Updated application state from Google Sheets database', 'SUCCESS');
+  };
+
+  // Startup Auto-Pull from Google Sheets Database if configured
+  useEffect(() => {
+    const autoLoadFromGoogleSheets = async () => {
+      // 1. If Webhook configured
+      if (googleSheetsConfig.webhookUrl) {
+        try {
+          const res = await fetchDatabaseViaWebhook(googleSheetsConfig.webhookUrl);
+          if (res.postOffices && res.postOffices.length > 0) {
+            setPostOffices(
+              [...res.postOffices].sort((a, b) =>
+                a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+              )
+            );
+          }
+          if (res.reports && res.reports.length > 0) {
+            setReports(res.reports);
+          }
+          if (res.users && res.users.length > 0) {
+            setUsers(res.users);
+          }
+          logAction('SHEETS_AUTO_LOAD', 'Loaded database directly from Google Sheet Webhook on startup', 'SUCCESS');
+        } catch (e) {
+          // Graceful fallback to local cache
+        }
+      }
+      // 2. If OAuth configured with valid token
+      else if (googleSheetsConfig.spreadsheetId) {
+        const token = getGoogleAccessToken();
+        if (token) {
+          try {
+            const res = await fetchFullDatabaseFromGoogleSheet(googleSheetsConfig.spreadsheetId, token);
+            if (res.postOffices && res.postOffices.length > 0) {
+              setPostOffices(
+                [...res.postOffices].sort((a, b) =>
+                  a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+                )
+              );
+            }
+            if (res.reports && res.reports.length > 0) {
+              setReports(res.reports);
+            }
+            if (res.users && res.users.length > 0) {
+              setUsers(res.users);
+            }
+            logAction('SHEETS_AUTO_LOAD', 'Loaded database directly from Google Sheet OAuth on startup', 'SUCCESS');
+          } catch (e) {
+            // Graceful fallback to local cache
+          }
+        }
+      }
+    };
+
+    autoLoadFromGoogleSheets();
+  }, []);
+
+  const handleRefreshData = async () => {
+    // 1. First refresh from local cache
     const savedReports = localStorage.getItem('pakpost_reports');
     if (savedReports) {
       try {
@@ -111,6 +211,52 @@ export default function App() {
       }
     }
     setLastRefreshedAt(new Date());
+
+    // 2. If Google Sheet database is linked, pull live updates
+    if (googleSheetsConfig.webhookUrl) {
+      try {
+        const res = await fetchDatabaseViaWebhook(googleSheetsConfig.webhookUrl);
+        if (res.postOffices && res.postOffices.length > 0) {
+          setPostOffices(
+            [...res.postOffices].sort((a, b) =>
+              a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+            )
+          );
+        }
+        if (res.reports && res.reports.length > 0) {
+          setReports(res.reports);
+        }
+        if (res.users && res.users.length > 0) {
+          setUsers(res.users);
+        }
+        setLastRefreshedAt(new Date());
+      } catch (e) {
+        // Silent catch for polling
+      }
+    } else if (googleSheetsConfig.spreadsheetId) {
+      const token = getGoogleAccessToken();
+      if (token) {
+        try {
+          const res = await fetchFullDatabaseFromGoogleSheet(googleSheetsConfig.spreadsheetId, token);
+          if (res.postOffices && res.postOffices.length > 0) {
+            setPostOffices(
+              [...res.postOffices].sort((a, b) =>
+                a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+              )
+            );
+          }
+          if (res.reports && res.reports.length > 0) {
+            setReports(res.reports);
+          }
+          if (res.users && res.users.length > 0) {
+            setUsers(res.users);
+          }
+          setLastRefreshedAt(new Date());
+        } catch (e) {
+          // Silent catch for polling
+        }
+      }
+    }
   };
 
   useEffect(() => {
@@ -144,26 +290,24 @@ export default function App() {
   }, [googleSheetsConfig]);
 
   useEffect(() => {
+    localStorage.setItem('pakpost_users', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('pakpost_whatsapp', JSON.stringify(whatsAppConfig));
+  }, [whatsAppConfig]);
+
+  useEffect(() => {
+    localStorage.setItem('pakpost_triggers', JSON.stringify(triggerConfig));
+  }, [triggerConfig]);
+
+  useEffect(() => {
     if (currentUser) {
       localStorage.setItem('pakpost_user', JSON.stringify(currentUser));
     } else {
       localStorage.removeItem('pakpost_user');
     }
   }, [currentUser]);
-
-  // Logging Helper
-  const logAction = (action: string, details: string, type: 'INFO' | 'WARNING' | 'SUCCESS' | 'ERROR' = 'INFO') => {
-    const newLog: SystemLog = {
-      id: `log-${Date.now()}`,
-      timestamp: new Date().toLocaleString(),
-      user: currentUser ? currentUser.username : 'SYSTEM',
-      role: currentUser ? currentUser.role : 'GUEST',
-      action,
-      details,
-      type,
-    };
-    setLogs((prev) => [newLog, ...prev]);
-  };
 
   // Login & Logout
   const handleLoginSuccess = (user: User) => {
@@ -277,69 +421,102 @@ export default function App() {
     }
   };
 
-  // Master Data Office CRUD (Always kept in Alphabetical A-Z Ascending Order)
+  // Master Data Office CRUD (Always kept in Alphabetical A-Z Ascending Order & synced to Google Sheet)
   const handleSaveOffice = (office: PostOffice) => {
+    let updated: PostOffice[];
     const exists = postOffices.some((p) => p.id === office.id);
     if (exists) {
-      setPostOffices((prev) =>
-        prev
-          .map((p) => (p.id === office.id ? office : p))
-          .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
-      );
+      updated = postOffices
+        .map((p) => (p.id === office.id ? office : p))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
       logAction('MASTER_OFFICE_UPDATE', `Updated office master record for ${office.name}`);
     } else {
-      setPostOffices((prev) =>
-        [...prev, office].sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-        )
+      updated = [...postOffices, office].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
       );
       logAction('MASTER_OFFICE_ADD', `Added new post office: ${office.name}`);
+    }
+    setPostOffices(updated);
+
+    if (googleSheetsConfig.autoSyncEnabled) {
+      dispatchOfficesSync(googleSheetsConfig, updated).catch((err) => {
+        console.warn('Google Sheets offices sync error:', err);
+      });
     }
   };
 
   const handleToggleOfficeStatus = (officeId: string) => {
-    setPostOffices((prev) =>
-      prev.map((p) =>
-        p.id === officeId ? { ...p, status: p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' } : p
-      )
+    const updated = postOffices.map((p) =>
+      p.id === officeId ? { ...p, status: p.status === 'ACTIVE' ? ('INACTIVE' as const) : ('ACTIVE' as const) } : p
     );
+    setPostOffices(updated);
     logAction('MASTER_STATUS_TOGGLE', `Toggled office status for ID ${officeId}`);
+
+    if (googleSheetsConfig.autoSyncEnabled) {
+      dispatchOfficesSync(googleSheetsConfig, updated).catch((err) => {
+        console.warn('Google Sheets offices sync error:', err);
+      });
+    }
   };
 
   const handleDeleteOffice = (officeId: string) => {
     const target = postOffices.find((p) => p.id === officeId);
-    setPostOffices((prev) => prev.filter((p) => p.id !== officeId));
+    const updated = postOffices.filter((p) => p.id !== officeId);
+    setPostOffices(updated);
     logAction('MASTER_OFFICE_DELETE', `Deleted post office: ${target?.name || officeId}`, 'WARNING');
+
+    if (googleSheetsConfig.autoSyncEnabled) {
+      dispatchOfficesSync(googleSheetsConfig, updated).catch((err) => {
+        console.warn('Google Sheets offices sync error:', err);
+      });
+    }
   };
 
   const handleBulkImportOffices = (imported: PostOffice[], replaceExisting: boolean) => {
-    setPostOffices((prev) => {
-      let combined: PostOffice[];
-      if (replaceExisting) {
-        combined = imported;
-      } else {
-        const existingNames = new Set(prev.map((p) => p.name.toLowerCase()));
-        const newOnes = imported.filter((p) => !existingNames.has(p.name.toLowerCase()));
-        combined = [...prev, ...newOnes];
-      }
-      return combined.sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-      );
-    });
+    let combined: PostOffice[];
+    if (replaceExisting) {
+      combined = imported;
+    } else {
+      const existingNames = new Set(postOffices.map((p) => p.name.toLowerCase()));
+      const newOnes = imported.filter((p) => !existingNames.has(p.name.toLowerCase()));
+      combined = [...postOffices, ...newOnes];
+    }
+    const sorted = combined.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+    );
+    setPostOffices(sorted);
     logAction(
       'MASTER_OFFICE_BULK_IMPORT',
       `Imported ${imported.length} offices (${replaceExisting ? 'Replaced existing' : 'Appended'})`
     );
+
+    if (googleSheetsConfig.autoSyncEnabled) {
+      dispatchOfficesSync(googleSheetsConfig, sorted).catch((err) => {
+        console.warn('Google Sheets offices bulk sync error:', err);
+      });
+    }
   };
 
   const handleClearAllOffices = () => {
     setPostOffices([]);
     logAction('MASTER_OFFICE_CLEAR_ALL', 'Cleared all post offices from master directory', 'WARNING');
+
+    if (googleSheetsConfig.autoSyncEnabled) {
+      dispatchOfficesSync(googleSheetsConfig, []).catch((err) => {
+        console.warn('Google Sheets offices sync error:', err);
+      });
+    }
   };
 
   const handleResetDefaultOffices = () => {
     setPostOffices([...INITIAL_POST_OFFICES]);
     logAction('MASTER_OFFICE_RESET', 'Reset post offices to Gujranwala Division defaults');
+
+    if (googleSheetsConfig.autoSyncEnabled) {
+      dispatchOfficesSync(googleSheetsConfig, INITIAL_POST_OFFICES).catch((err) => {
+        console.warn('Google Sheets offices sync error:', err);
+      });
+    }
   };
 
   // Password Update
@@ -359,8 +536,8 @@ export default function App() {
 
     if (triggerType === 'REMINDER_5PM') {
       const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
-      const submittedSet = new Set(reports.filter((r) => r.date === today).map((r) => r.officeCode));
-      const pending = activeOffices.filter((po) => !submittedSet.has(po.code));
+      const submittedSet = new Set(reports.filter((r) => r.date === today).map((r) => r.officeName));
+      const pending = activeOffices.filter((po) => !submittedSet.has(po.name));
 
       setTriggerConfig((prev) => ({ ...prev, lastReminderRun: nowStr }));
       logAction(
@@ -377,28 +554,33 @@ export default function App() {
       // 12:05 AM Balance Carry Forward
       const latestClosingMap: Record<string, number> = {};
       reports.forEach((r) => {
-        latestClosingMap[r.officeCode] = r.closingBalance;
+        latestClosingMap[r.officeName] = r.closingBalance;
       });
 
-      setPostOffices((prev) =>
-        prev.map((po) => ({
-          ...po,
-          initialBalance: latestClosingMap[po.code] !== undefined ? latestClosingMap[po.code] : po.initialBalance,
-        }))
-      );
+      const updated = postOffices.map((po) => ({
+        ...po,
+        initialBalance: latestClosingMap[po.name] !== undefined ? latestClosingMap[po.name] : po.initialBalance,
+      }));
 
+      setPostOffices(updated);
       setTriggerConfig((prev) => ({ ...prev, lastRolloverRun: nowStr }));
       logAction(
         'TRIGGER_ROLLOVER_RUN',
         'Executed 12:05 AM Trigger: Carried forward closing balances for all post offices.'
       );
+
+      if (googleSheetsConfig.autoSyncEnabled) {
+        dispatchOfficesSync(googleSheetsConfig, updated).catch((err) => {
+          console.warn('Google Sheets offices rollover sync error:', err);
+        });
+      }
     }
   };
 
   // Calculate pending office count for today
   const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
-  const todaySubmittedSet = new Set(reports.filter((r) => r.date === today).map((r) => r.officeCode));
-  const pendingCountToday = activeOffices.filter((po) => !todaySubmittedSet.has(po.code)).length;
+  const todaySubmittedSet = new Set(reports.filter((r) => r.date === today).map((r) => r.officeName));
+  const pendingCountToday = activeOffices.filter((po) => !todaySubmittedSet.has(po.name)).length;
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-slate-800 font-sans flex flex-col">
@@ -423,6 +605,8 @@ export default function App() {
         onToggleAutoRefresh={() => setAutoRefreshEnabled((prev) => !prev)}
         onManualRefresh={handleRefreshData}
         lastRefreshedAt={lastRefreshedAt}
+        googleSheetsConfig={googleSheetsConfig}
+        onNavigateGoogleSheets={() => setActiveTab('google-sheets')}
       />
 
       {/* Main Body */}
@@ -497,8 +681,14 @@ export default function App() {
           {activeTab === 'google-sheets' && (
             <GoogleSheetsManager
               reports={reports}
+              postOffices={postOffices}
+              users={users}
+              whatsAppConfig={whatsAppConfig}
+              triggerConfig={triggerConfig}
+              logs={logs}
               config={googleSheetsConfig}
               onUpdateConfig={setGoogleSheetsConfig}
+              onUpdateAllDatabase={handleUpdateAllDatabase}
               onAddLog={logAction}
             />
           )}

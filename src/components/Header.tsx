@@ -1,6 +1,6 @@
 import React from 'react';
-import { User } from '../types';
-import { LogOut, ShieldCheck, Building2, Calendar, Bell, Lock, RefreshCw } from 'lucide-react';
+import { User, GoogleSheetsConfig } from '../types';
+import { LogOut, ShieldCheck, Building2, Calendar, Bell, Lock, RefreshCw, Database, ExternalLink } from 'lucide-react';
 import { formatDatePK, getTodayDateString } from '../utils/calculations';
 
 interface HeaderProps {
@@ -13,6 +13,8 @@ interface HeaderProps {
   onToggleAutoRefresh: () => void;
   onManualRefresh: () => void;
   lastRefreshedAt?: Date | null;
+  googleSheetsConfig?: GoogleSheetsConfig;
+  onNavigateGoogleSheets?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,9 +27,12 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleAutoRefresh,
   onManualRefresh,
   lastRefreshedAt,
+  googleSheetsConfig,
+  onNavigateGoogleSheets,
 }) => {
   const todayStr = getTodayDateString();
   const isAdmin = currentUser?.role === 'ADMIN';
+  const isSheetsConnected = !!(googleSheetsConfig?.spreadsheetId || googleSheetsConfig?.webhookUrl);
 
   return (
     <header className="bg-white text-gray-800 shadow-xs border-b border-gray-200 sticky top-0 z-30 no-print">
@@ -55,6 +60,27 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right Section: Auto-Refresh, Date, Pending Badge, User & Admin Login / Logout */}
           <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Google Sheets Database Status Pill */}
+            {onNavigateGoogleSheets && (
+              <button
+                onClick={onNavigateGoogleSheets}
+                className={`hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border ${
+                  isSheetsConnected
+                    ? 'bg-green-50 hover:bg-green-100 text-[#006633] border-green-200'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                }`}
+                title={
+                  isSheetsConnected
+                    ? `Google Sheets Database is Connected (${googleSheetsConfig?.syncMethod || 'ACTIVE'}). Click to open database manager.`
+                    : 'Click to connect Google Sheets Database'
+                }
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>{isSheetsConnected ? 'Google Sheet DB: Live' : 'Connect Sheet DB'}</span>
+                {isSheetsConnected && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
+              </button>
+            )}
+
             {/* Auto-Refresh Toggle Control */}
             <div className="flex items-center space-x-1.5 bg-gray-50 p-1 rounded-lg border border-gray-200">
               <button
@@ -146,4 +172,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-
