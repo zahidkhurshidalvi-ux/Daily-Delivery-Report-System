@@ -22,7 +22,7 @@ import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
 import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
 import { getTodayDateString, calculateClosingBalance } from './utils/calculations';
-import { getGoogleAccessToken, appendReportToGoogleSheet } from './utils/googleSheets';
+import { dispatchReportSync } from './utils/googleSheets';
 
 export default function App() {
   const today = getTodayDateString();
@@ -212,27 +212,21 @@ export default function App() {
         `Submitted daily report for ${reportData.officeName} on ${reportData.date}. Closing Bal: ${reportData.closingBalance}`
       );
 
-      // Auto-Sync to Google Sheets if enabled
-      if (googleSheetsConfig.autoSyncEnabled && googleSheetsConfig.spreadsheetId) {
-        const token = getGoogleAccessToken();
-        if (token) {
-          appendReportToGoogleSheet(
-            googleSheetsConfig.spreadsheetId,
-            newReportRecord,
-            token,
-            googleSheetsConfig.sheetName || 'Daily Delivery Reports'
-          )
-            .then(() => {
+      // Auto-Sync to Google Sheets if enabled (supports Webhook & OAuth)
+      if (googleSheetsConfig.autoSyncEnabled) {
+        dispatchReportSync(googleSheetsConfig, newReportRecord)
+          .then((res) => {
+            if (res.synced) {
               logAction(
                 'GOOGLE_SHEETS_AUTOSYNC',
-                `Auto-synced report for ${reportData.officeName} to Google Sheet`,
+                `Auto-synced report for ${reportData.officeName} to Google Sheet (${res.method.toUpperCase()})`,
                 'SUCCESS'
               );
-            })
-            .catch((err) => {
-              console.warn('Google Sheets auto-sync error:', err);
-            });
-        }
+            }
+          })
+          .catch((err) => {
+            console.warn('Google Sheets auto-sync error:', err);
+          });
       }
     }
   };

@@ -76,6 +76,8 @@ export interface GasModule {
 }
 
 export interface GoogleSheetsConfig {
+  syncMethod?: 'WEBHOOK' | 'OAUTH';
+  webhookUrl?: string;
   spreadsheetId?: string;
   spreadsheetUrl?: string;
   spreadsheetTitle?: string;
