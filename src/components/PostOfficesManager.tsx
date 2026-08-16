@@ -26,12 +26,14 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
   const [mobileNumber, setMobileNumber] = useState('');
   const [initialBalance, setInitialBalance] = useState(100);
 
-  const filteredOffices = postOffices.filter(
-    (po) =>
-      po.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      po.postmasterName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      po.mobileNumber.includes(searchTerm)
-  );
+  const filteredOffices = [...postOffices]
+    .filter(
+      (po) =>
+        po.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        po.postmasterName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        po.mobileNumber.includes(searchTerm)
+    )
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
 
   const handleOpenAdd = () => {
     setEditingOffice(null);

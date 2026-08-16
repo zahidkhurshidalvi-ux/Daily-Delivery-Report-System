@@ -60,6 +60,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
 
   const pendingList = activeOffices
     .filter((po) => !submittedOfficeNames.has(po.name))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
     .map((office) => {
       const pastReports = reports
         .filter((r) => r.officeName === office.name)

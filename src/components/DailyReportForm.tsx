@@ -7,7 +7,7 @@ import {
   getTodayDateString,
   formatDatePK,
 } from '../utils/calculations';
-import { AlertCircle, CheckCircle2, Calculator, Save, FileText } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Calculator, Save, FileText, Search } from 'lucide-react';
 
 interface DailyReportFormProps {
   currentUser: User | null;
@@ -28,13 +28,18 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 }) => {
   const today = getTodayDateString();
 
+  // Always sort post offices in ascending alphabetical order (A to Z)
+  const sortedPostOffices = [...postOffices].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+  );
+
   // Check URL parameter for pre-selected post office
   const getUrlOfficeName = () => {
     try {
       const params = new URLSearchParams(window.location.search);
       const name = params.get('office') || params.get('po');
-      if (name && postOffices.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
-        return postOffices.find((p) => p.name.toLowerCase() === name.toLowerCase())?.name || '';
+      if (name && sortedPostOffices.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+        return sortedPostOffices.find((p) => p.name.toLowerCase() === name.toLowerCase())?.name || '';
       }
     } catch {
       // ignore
@@ -48,10 +53,11 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       : getUrlOfficeName() ||
         (currentUser?.role === 'POST_OFFICE' && currentUser.officeName
           ? currentUser.officeName
-          : postOffices[0]?.name || '');
+          : sortedPostOffices[0]?.name || '');
 
   const [date, setDate] = useState<string>(editingReport ? editingReport.date : today);
   const [selectedOfficeName, setSelectedOfficeName] = useState<string>(initialOfficeName);
+  const [officeSearchQuery, setOfficeSearchQuery] = useState<string>('');
   const [lastBalance, setLastBalance] = useState<string>(
     editingReport ? String(editingReport.lastBalance) : ''
   );
@@ -288,7 +294,9 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-gray-700">Select Post Office *</label>
+              <label className="block text-xs font-bold text-gray-700">
+                Select Post Office * <span className="text-gray-400 font-normal font-mono">(A-Z Order)</span>
+              </label>
               <button
                 type="button"
                 onClick={handleCopyDirectLink}
@@ -298,21 +306,52 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
                 <span>{linkCopied ? '✓ Link Copied!' : 'Copy Direct Link'}</span>
               </button>
             </div>
+
+            {/* Quick Search Filter for Post Offices */}
+            {!editingReport && sortedPostOffices.length > 5 && (
+              <div className="relative mb-1.5">
+                <Search className="w-3 h-3 text-gray-400 absolute left-2.5 top-2" />
+                <input
+                  type="text"
+                  placeholder="Type to filter office (e.g. Gujranwala, Daska)..."
+                  value={officeSearchQuery}
+                  onChange={(e) => {
+                    const q = e.target.value;
+                    setOfficeSearchQuery(q);
+                    const match = sortedPostOffices.find((po) =>
+                      po.name.toLowerCase().includes(q.toLowerCase())
+                    );
+                    if (match && q.trim()) {
+                      setSelectedOfficeName(match.name);
+                    }
+                  }}
+                  className="w-full bg-white border border-gray-200 text-gray-800 text-[11px] rounded-md pl-7 pr-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#006633] placeholder-gray-400"
+                />
+              </div>
+            )}
+
             <select
               value={selectedOfficeName}
               onChange={(e) => setSelectedOfficeName(e.target.value)}
               disabled={Boolean(editingReport)}
               className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
             >
-              {postOffices.map((po) => (
-                <option key={po.id} value={po.name}>
-                  {po.name}
-                </option>
-              ))}
+              {sortedPostOffices
+                .filter((po) =>
+                  !officeSearchQuery
+                    ? true
+                    : po.name.toLowerCase().includes(officeSearchQuery.toLowerCase())
+                )
+                .map((po) => (
+                  <option key={po.id} value={po.name}>
+                    {po.name} {po.status === 'INACTIVE' ? '(Inactive)' : ''}
+                  </option>
+                ))}
             </select>
             {selectedOffice && (
-              <p className="text-[10px] text-gray-500 mt-1 font-medium">
-                Contact: <span className="font-bold text-gray-700">{selectedOffice.mobileNumber}</span>
+              <p className="text-[10px] text-gray-500 mt-1 font-medium flex items-center justify-between">
+                <span>Postmaster: <strong className="text-gray-700">{selectedOffice.postmasterName}</strong></span>
+                <span>Contact: <strong className="text-gray-700">{selectedOffice.mobileNumber}</strong></span>
               </p>
             )}
           </div>

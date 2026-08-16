@@ -22,7 +22,7 @@ import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
 import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
 import { getTodayDateString, calculateClosingBalance } from './utils/calculations';
-import { dispatchReportSync } from './utils/googleSheets';
+import { dispatchReportSync, dispatchReportDelete, dispatchReportBulkSync } from './utils/googleSheets';
 
 export default function App() {
   const today = getTodayDateString();
@@ -37,7 +37,10 @@ export default function App() {
 
   const [postOffices, setPostOffices] = useState<PostOffice[]>(() => {
     const saved = localStorage.getItem('pakpost_offices');
-    return saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
+    const rawList: PostOffice[] = saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
+    return [...rawList].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+    );
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -200,6 +203,23 @@ export default function App() {
         `Updated report for ${reportData.officeName} on ${reportData.date}. Closing Bal: ${reportData.closingBalance}`
       );
       setEditingReport(null);
+
+      // Instantly sync edited report to connected Google Sheet
+      if (googleSheetsConfig.autoSyncEnabled) {
+        dispatchReportBulkSync(googleSheetsConfig, updatedReports)
+          .then((res) => {
+            if (res.synced) {
+              logAction(
+                'GOOGLE_SHEETS_UPDATE_SYNC',
+                `Instantly updated Google Sheet with edited record for ${reportData.officeName}`,
+                'SUCCESS'
+              );
+            }
+          })
+          .catch((err) => {
+            console.warn('Google Sheets update sync error:', err);
+          });
+      }
     } else {
       const newReportRecord: DailyReport = {
         ...reportData,
@@ -234,19 +254,45 @@ export default function App() {
   const handleDeleteReport = (reportId: string) => {
     const target = reports.find((r) => r.id === reportId);
     if (target) {
-      setReports((prev) => prev.filter((r) => r.id !== reportId));
+      const remainingReports = reports.filter((r) => r.id !== reportId);
+      setReports(remainingReports);
       logAction('REPORT_DELETE', `Deleted report ${reportId} for ${target.officeName}`);
+
+      // Instantly remove record from connected Google Sheet
+      if (googleSheetsConfig.autoSyncEnabled) {
+        dispatchReportDelete(googleSheetsConfig, remainingReports, target)
+          .then((res) => {
+            if (res.synced) {
+              logAction(
+                'GOOGLE_SHEETS_DELETE_SYNC',
+                `Instantly removed deleted record (${target.officeName} - ${target.date}) from Google Sheet`,
+                'SUCCESS'
+              );
+            }
+          })
+          .catch((err) => {
+            console.warn('Google Sheets live delete sync error:', err);
+          });
+      }
     }
   };
 
-  // Master Data Office CRUD
+  // Master Data Office CRUD (Always kept in Alphabetical A-Z Ascending Order)
   const handleSaveOffice = (office: PostOffice) => {
     const exists = postOffices.some((p) => p.id === office.id);
     if (exists) {
-      setPostOffices((prev) => prev.map((p) => (p.id === office.id ? office : p)));
+      setPostOffices((prev) =>
+        prev
+          .map((p) => (p.id === office.id ? office : p))
+          .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
+      );
       logAction('MASTER_OFFICE_UPDATE', `Updated office master record for ${office.name}`);
     } else {
-      setPostOffices((prev) => [...prev, office]);
+      setPostOffices((prev) =>
+        [...prev, office].sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+        )
+      );
       logAction('MASTER_OFFICE_ADD', `Added new post office: ${office.name}`);
     }
   };

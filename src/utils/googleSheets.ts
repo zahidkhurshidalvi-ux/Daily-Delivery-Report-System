@@ -94,7 +94,6 @@ export const requestGoogleOAuthToken = async (
   onError?: (err: any) => void
 ): Promise<string> => {
   try {
-    // Check if token already valid
     const existing = getGoogleAccessToken();
     if (existing) {
       if (onSuccess) onSuccess(existing);
@@ -107,7 +106,6 @@ export const requestGoogleOAuthToken = async (
     
     const accessToken = credential?.accessToken;
     if (!accessToken) {
-      // If credential accessToken is empty, try STS or prompt
       throw new Error('Google did not return an access token. Please ensure popup was not blocked or use the Google Apps Script Webhook sync method.');
     }
 
@@ -122,11 +120,11 @@ export const requestGoogleOAuthToken = async (
     
     if (error.code === 'auth/unauthorized-domain') {
       const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'deployed domain';
-      friendlyMessage = `This deployed domain (${currentHost}) is not authorized in Firebase Console -> Authentication -> Settings -> Authorized Domains. You can add it, or use the 100% reliable Google Apps Script Webhook method below which works instantly without any domain authorization!`;
+      friendlyMessage = `This deployed domain (${currentHost}) is not authorized in Firebase Console. Please use Method 1 (Google Apps Script Webhook) which works instantly without any domain authorization!`;
     } else if (error.code === 'auth/popup-closed-by-user') {
       friendlyMessage = 'Sign-in popup was closed before completing.';
     } else if (error.code === 'auth/popup-blocked') {
-      friendlyMessage = 'Sign-in popup was blocked by browser. Please allow popups for this site or use the Google Apps Script Webhook method.';
+      friendlyMessage = 'Sign-in popup was blocked by browser. Please allow popups or use Method 1 (Apps Script Webhook).';
     } else if (error.code === 'auth/cancelled-popup-request') {
       friendlyMessage = 'Sign-in request was cancelled.';
     }
@@ -208,12 +206,18 @@ export const reportToRowValues = (report: DailyReport, index: number): (string |
 // ==========================================
 
 /**
- * Generate the ready-to-deploy Google Apps Script Code template
+ * Generate the ready-to-deploy Google Apps Script Code template with INSTANT DELETE, EDIT & BULK SYNC support
  */
 export const getAppsScriptTemplateCode = (): string => {
   return `/**
  * PAKISTAN POST - GUJRANWALA DIVISION
  * AUTOMATED GOOGLE SHEETS LIVE SYNC WEB APP
+ * 
+ * FEATURES:
+ * - Instant Append on Report Submission
+ * - Instant Live Removal on Report Deletion (Web portal deletion immediately removes the row in Google Sheets)
+ * - Instant Update on Report Edit
+ * - Full 16-column Official Layout with Grand Totals & Delivery %
  * 
  * HOW TO DEPLOY:
  * 1. Open your Google Sheet
@@ -221,7 +225,7 @@ export const getAppsScriptTemplateCode = (): string => {
  * 3. Replace all existing code with this script
  * 4. Click "Deploy" -> "New deployment"
  * 5. Select type "Web app"
- * 6. Set Description: "Pak Post Sync"
+ * 6. Set Description: "Pak Post Live Sync & Delete"
  * 7. Set "Execute as": "Me (your email)"
  * 8. Set "Who has access": "Anyone"  <-- CRITICAL
  * 9. Click "Deploy", authorize permissions, and copy the "Web app URL"
@@ -252,11 +256,14 @@ function doPost(e) {
       setupHeaders(sheet);
     }
 
-    if (payload.action === "bulk_sync") {
+    // 1. DELETE ACTION / BULK REPLACEMENT (Instantly keeps sheet 100% accurate)
+    if (payload.action === "delete_report" || payload.action === "bulk_sync" || payload.action === "update_all") {
       var reports = payload.reports || [];
-      // Clear existing data below header
-      if (sheet.getLastRow() > 2) {
-        sheet.getRange(3, 1, sheet.getLastRow() - 2, 16).clearContent();
+      var lastRow = sheet.getLastRow();
+      
+      // Clear all existing data rows below the header (from row 3 downwards)
+      if (lastRow >= 3) {
+        sheet.getRange(3, 1, Math.max(1, lastRow - 2), 16).clearContent();
       }
       
       var rows = [];
@@ -293,12 +300,15 @@ function doPost(e) {
       
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
-        message: "Successfully bulk synced " + rows.length + " reports",
+        action: payload.action,
+        message: payload.action === "delete_report" 
+          ? "Report removed and sheet updated with remaining " + rows.length + " reports" 
+          : "Successfully synced " + rows.length + " reports",
         count: rows.length
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // Single report append
+    // 2. SINGLE REPORT APPEND
     if (payload.action === "append_report" || payload.report) {
       var rep = payload.report;
       var srNo = Math.max(1, sheet.getLastRow() - 1);
@@ -380,14 +390,12 @@ export const testWebhookConnection = async (webhookUrl: string): Promise<{ succe
         message: data.message || 'Connected to Google Apps Script Webhook successfully!',
       };
     } else {
-      // In case GET redirect needs POST probe
       return {
         success: true,
         message: 'Google Apps Script Web App endpoint responded.',
       };
     }
   } catch (err: any) {
-    // If CORS prevents direct GET reading in browser, try POST probe
     try {
       await fetch(cleanUrl, {
         method: 'POST',
@@ -419,6 +427,33 @@ export const syncReportViaWebhook = async (webhookUrl: string, report: DailyRepo
     body: JSON.stringify({
       action: 'append_report',
       report,
+    }),
+  });
+
+  return true;
+};
+
+/**
+ * Delete a report and update the Google Sheet via Apps Script Webhook
+ */
+export const deleteReportViaWebhook = async (
+  webhookUrl: string,
+  remainingReports: DailyReport[],
+  deletedReport?: DailyReport
+): Promise<boolean> => {
+  const cleanUrl = webhookUrl.trim();
+  if (!cleanUrl) return false;
+
+  const sorted = [...remainingReports].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  await fetch(cleanUrl, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({
+      action: 'delete_report',
+      deletedReport: deletedReport || null,
+      reports: sorted,
     }),
   });
 
@@ -530,7 +565,7 @@ export const appendReportToGoogleSheet = async (
 ): Promise<boolean> => {
   const rowValues = reportToRowValues(report, 0);
   const cleanRow = [
-    '', // Sr# will be row index or formatted
+    '', // Sr# will be formatted or auto-incremented
     ...rowValues.slice(1),
   ];
 
@@ -561,7 +596,7 @@ export const appendReportToGoogleSheet = async (
 };
 
 /**
- * Bulk sync / overwrite all reports to the connected Google Spreadsheet
+ * Bulk sync / overwrite all reports to the connected Google Spreadsheet (Also handles deletions cleanly)
  */
 export const bulkSyncReportsToGoogleSheet = async (
   spreadsheetId: string,
@@ -571,6 +606,18 @@ export const bulkSyncReportsToGoogleSheet = async (
 ): Promise<{ updatedRows: number }> => {
   const sorted = [...reports].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const rows = sorted.map((r, idx) => reportToRowValues(r, idx));
+
+  // First clear old data range from A3 to P1000 so deleted records are completely removed
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${sheetName}'!A3:P1000:clear`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  ).catch((e) => console.warn('Clear range warning:', e));
 
   const allValues = [
     ['PAKISTAN POST - GUJRANWALA DIVISION DAILY DELIVERY REPORTING SYSTEM'],
@@ -644,7 +691,7 @@ export const dispatchReportSync = async (
     return { synced: false, method: 'none' };
   }
 
-  // 1. Try Webhook first if configured (100% reliable)
+  // 1. Webhook (Recommended)
   if (config.webhookUrl?.trim()) {
     try {
       await syncReportViaWebhook(config.webhookUrl, report);
@@ -654,7 +701,7 @@ export const dispatchReportSync = async (
     }
   }
 
-  // 2. Try Direct OAuth if spreadsheetId and token exist
+  // 2. Direct OAuth
   if (config.spreadsheetId) {
     const token = getGoogleAccessToken();
     if (token) {
@@ -668,6 +715,93 @@ export const dispatchReportSync = async (
         return { synced: true, method: 'oauth' };
       } catch (e) {
         console.warn('OAuth auto-sync warning:', e);
+      }
+    }
+  }
+
+  return { synced: false, method: 'none' };
+};
+
+/**
+ * Universal Instant Delete Helper:
+ * When a report is deleted from the web portal, immediately removes it from the connected Google Sheet
+ */
+export const dispatchReportDelete = async (
+  config: GoogleSheetsConfig,
+  remainingReports: DailyReport[],
+  deletedReport?: DailyReport
+): Promise<{ synced: boolean; method: string }> => {
+  if (!config.autoSyncEnabled) {
+    return { synced: false, method: 'none' };
+  }
+
+  // 1. Webhook Delete
+  if (config.webhookUrl?.trim()) {
+    try {
+      await deleteReportViaWebhook(config.webhookUrl, remainingReports, deletedReport);
+      return { synced: true, method: 'webhook' };
+    } catch (e) {
+      console.warn('Webhook delete sync warning:', e);
+    }
+  }
+
+  // 2. Direct OAuth Delete
+  if (config.spreadsheetId) {
+    const token = getGoogleAccessToken();
+    if (token) {
+      try {
+        await bulkSyncReportsToGoogleSheet(
+          config.spreadsheetId,
+          remainingReports,
+          token,
+          config.sheetName || 'Daily Delivery Reports'
+        );
+        return { synced: true, method: 'oauth' };
+      } catch (e) {
+        console.warn('OAuth delete sync warning:', e);
+      }
+    }
+  }
+
+  return { synced: false, method: 'none' };
+};
+
+/**
+ * Universal Bulk Sync Helper:
+ * Used for full sync or after editing reports
+ */
+export const dispatchReportBulkSync = async (
+  config: GoogleSheetsConfig,
+  updatedReports: DailyReport[]
+): Promise<{ synced: boolean; method: string }> => {
+  if (!config.autoSyncEnabled) {
+    return { synced: false, method: 'none' };
+  }
+
+  // 1. Webhook Bulk Sync
+  if (config.webhookUrl?.trim()) {
+    try {
+      await bulkSyncViaWebhook(config.webhookUrl, updatedReports);
+      return { synced: true, method: 'webhook' };
+    } catch (e) {
+      console.warn('Webhook bulk sync warning:', e);
+    }
+  }
+
+  // 2. Direct OAuth Bulk Sync
+  if (config.spreadsheetId) {
+    const token = getGoogleAccessToken();
+    if (token) {
+      try {
+        await bulkSyncReportsToGoogleSheet(
+          config.spreadsheetId,
+          updatedReports,
+          token,
+          config.sheetName || 'Daily Delivery Reports'
+        );
+        return { synced: true, method: 'oauth' };
+      } catch (e) {
+        console.warn('OAuth bulk sync warning:', e);
       }
     }
   }
