@@ -312,6 +312,36 @@ export default function App() {
     logAction('MASTER_OFFICE_DELETE', `Deleted post office: ${target?.name || officeId}`, 'WARNING');
   };
 
+  const handleBulkImportOffices = (imported: PostOffice[], replaceExisting: boolean) => {
+    setPostOffices((prev) => {
+      let combined: PostOffice[];
+      if (replaceExisting) {
+        combined = imported;
+      } else {
+        const existingNames = new Set(prev.map((p) => p.name.toLowerCase()));
+        const newOnes = imported.filter((p) => !existingNames.has(p.name.toLowerCase()));
+        combined = [...prev, ...newOnes];
+      }
+      return combined.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+      );
+    });
+    logAction(
+      'MASTER_OFFICE_BULK_IMPORT',
+      `Imported ${imported.length} offices (${replaceExisting ? 'Replaced existing' : 'Appended'})`
+    );
+  };
+
+  const handleClearAllOffices = () => {
+    setPostOffices([]);
+    logAction('MASTER_OFFICE_CLEAR_ALL', 'Cleared all post offices from master directory', 'WARNING');
+  };
+
+  const handleResetDefaultOffices = () => {
+    setPostOffices([...INITIAL_POST_OFFICES]);
+    logAction('MASTER_OFFICE_RESET', 'Reset post offices to Gujranwala Division defaults');
+  };
+
   // Password Update
   const handleChangePassword = (username: string, newPass: string) => {
     setUsers((prev) =>
@@ -488,6 +518,9 @@ export default function App() {
               onSaveOffice={handleSaveOffice}
               onToggleStatus={handleToggleOfficeStatus}
               onDeleteOffice={handleDeleteOffice}
+              onBulkImportOffices={handleBulkImportOffices}
+              onClearAllOffices={handleClearAllOffices}
+              onResetDefaultOffices={handleResetDefaultOffices}
             />
           )}
 
