@@ -112,8 +112,29 @@ export const requestGoogleOAuthToken = async (
     (firebaseConfig as any).oAuthClientId ||
     '199284519920-s5sjffjmkgae7fdop5iqm0sjcfv0fpv1.apps.googleusercontent.com';
 
+  // Helper to ensure GSI script is ready
+  const ensureGsiReady = async (): Promise<boolean> => {
+    if (typeof window === 'undefined') return false;
+    if ((window as any).google?.accounts?.oauth2) return true;
+
+    return new Promise((resolve) => {
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts++;
+        if ((window as any).google?.accounts?.oauth2) {
+          clearInterval(interval);
+          resolve(true);
+        } else if (attempts > 20) {
+          clearInterval(interval);
+          resolve(false);
+        }
+      }, 100);
+    });
+  };
+
   // 1. Try Google Identity Services (GSI) Token Client if available in window
-  if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+  const isGsiAvailable = await ensureGsiReady();
+  if (isGsiAvailable && (window as any).google?.accounts?.oauth2) {
     try {
       const gsiToken = await new Promise<string>((resolve, reject) => {
         try {
