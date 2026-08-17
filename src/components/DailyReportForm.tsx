@@ -8,7 +8,7 @@ import {
   formatDatePK,
   cleanAndFilterPostOffices,
 } from '../utils/calculations';
-import { AlertCircle, CheckCircle2, Calculator, Save, FileText, Search } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Calculator, Save, FileText } from 'lucide-react';
 
 interface DailyReportFormProps {
   currentUser: User | null;
@@ -56,7 +56,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
   const [date, setDate] = useState<string>(editingReport ? editingReport.date : today);
   const [selectedOfficeName, setSelectedOfficeName] = useState<string>(initialOfficeName);
-  const [officeSearchQuery, setOfficeSearchQuery] = useState<string>('');
   const [lastBalance, setLastBalance] = useState<string>(
     editingReport ? String(editingReport.lastBalance) : ''
   );
@@ -79,7 +78,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
 
   // Auto-fill Last Balance from previous day closing/deposit balance whenever office or date changes
   useEffect(() => {
@@ -133,15 +131,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
   const totalDisposed = numDelivered + numReturned + numMissent;
   // Remaining Calculated Deposit = Total Articles - Total Disposed
   const calculatedRemainingDeposit = Math.max(0, totalArticles - totalDisposed);
-
-  // Copy Direct Link for selected Post Office
-  const handleCopyDirectLink = () => {
-    if (!selectedOffice) return;
-    const url = `${window.location.origin}${window.location.pathname}?office=${encodeURIComponent(selectedOffice.name)}`;
-    navigator.clipboard.writeText(url);
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 3000);
-  };
 
   const handleAutoFillDeposit = () => {
     setDeposit(String(calculatedRemainingDeposit));
@@ -306,43 +295,9 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-gray-700">
-                Select Post Office *
-              </label>
-              <button
-                type="button"
-                onClick={handleCopyDirectLink}
-                className="text-[10px] text-[#006633] hover:underline font-bold flex items-center space-x-1"
-                title="Copy Direct Submission Link for WhatsApp"
-              >
-                <span>{linkCopied ? '✓ Link Copied!' : 'Copy Direct Link'}</span>
-              </button>
-            </div>
-
-            {/* Quick Search Filter for Post Offices */}
-            {!editingReport && sortedPostOffices.length > 5 && (
-              <div className="relative mb-1.5">
-                <Search className="w-3 h-3 text-gray-400 absolute left-2.5 top-2" />
-                <input
-                  type="text"
-                  placeholder="Type to filter office (e.g. Gujranwala, Daska)..."
-                  value={officeSearchQuery}
-                  onChange={(e) => {
-                    const q = e.target.value;
-                    setOfficeSearchQuery(q);
-                    const qLower = (q || '').toLowerCase();
-                    const match = sortedPostOffices.find((po) =>
-                      (po.name || '').toLowerCase().includes(qLower)
-                    );
-                    if (match && q.trim()) {
-                      setSelectedOfficeName(match.name);
-                    }
-                  }}
-                  className="w-full bg-white border border-gray-200 text-gray-800 text-[11px] rounded-md pl-7 pr-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#006633] placeholder-gray-400"
-                />
-              </div>
-            )}
+            <label className="block text-xs font-bold text-gray-700 mb-1">
+              Select Post Office *
+            </label>
 
             <select
               value={selectedOfficeName}
@@ -350,17 +305,11 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
               disabled={Boolean(editingReport)}
               className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
             >
-              {sortedPostOffices
-                .filter((po) =>
-                  !officeSearchQuery
-                    ? true
-                    : (po.name || '').toLowerCase().includes((officeSearchQuery || '').toLowerCase())
-                )
-                .map((po) => (
-                  <option key={po.id} value={po.name}>
-                    {po.name} {po.status === 'INACTIVE' ? '(Inactive)' : ''}
-                  </option>
-                ))}
+              {sortedPostOffices.map((po) => (
+                <option key={po.id} value={po.name}>
+                  {po.name} {po.status === 'INACTIVE' ? '(Inactive)' : ''}
+                </option>
+              ))}
             </select>
             {selectedOffice && (
               <p className="text-[10px] text-gray-500 mt-1 font-medium flex items-center justify-between">
