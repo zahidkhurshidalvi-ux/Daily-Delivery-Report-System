@@ -180,6 +180,167 @@ export function summarizeReports(reports: DailyReport[]) {
 }
 
 /**
+ * Detects if a string is a table header, column title, or placeholder rather than an actual post office name.
+ */
+export function isInvalidPostOfficeName(rawName: any): boolean {
+  if (!rawName) return true;
+  const name = String(rawName).trim();
+  if (!name || name.length < 2) return true;
+
+  const n = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const bannedKeywords = [
+    'postofficename',
+    'postoffice',
+    'officename',
+    'nameofpostoffice',
+    'postmasterinchargename',
+    'postmasterincharge',
+    'postmaster',
+    'inchargename',
+    'incharge',
+    'mobilenumberwhatsapp',
+    'mobilenumber',
+    'whatsappnumber',
+    'pakistanpost',
+    'reportnotsubmitted',
+    'notsubmitted',
+    'submittill',
+    'pendingreports',
+    'deliveryreport',
+    'receivedtoday',
+    'lastbalance',
+    'closingbalance',
+    'initialbalance',
+    'openingbalance',
+    'dailydelivery',
+    'totalbalance',
+    'subtotal',
+    'grandtotal',
+    'srno',
+    'serialnumber',
+  ];
+
+  for (const keyword of bannedKeywords) {
+    if (n === keyword || n.startsWith(keyword) || n.endsWith(keyword) || (keyword.length >= 7 && n.includes(keyword))) {
+      return true;
+    }
+  }
+
+  // Exact matches
+  const exactHeaders = new Set([
+    'name',
+    'office',
+    'status',
+    'mobile',
+    'phone',
+    'whatsapp',
+    'balance',
+    'date',
+    'total',
+    'remarks',
+    'sr',
+    'sno',
+    'id',
+    'action',
+    'actions',
+    'active',
+    'inactive',
+  ]);
+
+  if (exactHeaders.has(n)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Filters and sanitizes a list of PostOffices, removing any header rows, duplicates, or empty entries.
+ */
+export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
+  if (!Array.isArray(offices)) return [];
+  const seen = new Set<string>();
+  const cleaned: PostOffice[] = [];
+
+  for (const po of offices) {
+    if (!po || !po.name) continue;
+    const trimmedName = String(po.name).trim();
+    if (isInvalidPostOfficeName(trimmedName)) continue;
+
+    // Check if postmasterName or mobileNumber is a header
+    let pm = String(po.postmasterName || '').trim();
+    if (
+      !pm ||
+      pm.toLowerCase().includes('postmaster / incharge') ||
+      pm.toLowerCase().includes('incharge name') ||
+      pm.toLowerCase().includes('postmaster name') ||
+      isInvalidPostOfficeName(pm)
+    ) {
+      pm = 'Postmaster';
+    }
+
+    let mob = String(po.mobileNumber || '').trim();
+    if (
+      !mob ||
+      mob.toLowerCase().includes('mobile') ||
+      mob.toLowerCase().includes('whatsapp') ||
+      mob.toLowerCase().includes('phone') ||
+      mob.toLowerCase().includes('number')
+    ) {
+      mob = '03001234567';
+    }
+
+    const key = trimmedName.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      cleaned.push({
+        ...po,
+        name: trimmedName,
+        postmasterName: pm,
+        mobileNumber: mob,
+        status: po.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+        initialBalance: Number(po.initialBalance) || 0,
+      });
+    }
+  }
+
+  return cleaned.sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+  );
+}
+
+/**
+ * Filters and sanitizes DailyReports, removing any rows where officeName or date is a header title.
+ */
+export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
+  if (!Array.isArray(reports)) return [];
+  const cleaned: DailyReport[] = [];
+
+  for (const r of reports) {
+    if (!r || !r.officeName) continue;
+    const trimmedName = String(r.officeName).trim();
+    if (isInvalidPostOfficeName(trimmedName)) continue;
+
+    const dStr = String(r.date || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (dStr.includes('date') || dStr.includes('reportdate') || dStr.includes('day')) continue;
+
+    let pm = String(r.postmasterName || '').trim();
+    if (!pm || pm.toLowerCase().includes('postmaster / incharge') || pm.toLowerCase().includes('incharge name')) {
+      pm = 'Postmaster';
+    }
+
+    cleaned.push({
+      ...r,
+      officeName: trimmedName,
+      postmasterName: pm,
+    });
+  }
+
+  return cleaned;
+}
+
+/**
  * Returns a list of daily reports for a target date, automatically including
  * entries for active post offices that have not submitted a report till 5 PM
  * with remarks 'Report not submitted till 5 PM'.
@@ -191,15 +352,18 @@ export function getCompleteDateReports(
 ): DailyReport[] {
   if (!targetDate) return reports;
 
-  const dateReports = reports.filter((r) => r.date === targetDate);
+  const validOffices = cleanAndFilterPostOffices(postOffices);
+  const validReports = cleanAndFilterReports(reports);
+
+  const dateReports = validReports.filter((r) => r.date === targetDate);
   const submittedOfficeNames = new Set(dateReports.map((r) => r.officeName));
-  const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
+  const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
 
   const missingReports: DailyReport[] = activeOffices
     .filter((po) => !submittedOfficeNames.has(po.name))
     .map((office) => {
       // Find previous submitted report for this office to carry forward last balance if available
-      const pastReports = reports
+      const pastReports = validReports
         .filter((r) => r.officeName === office.name && r.date < targetDate)
         .sort((a, b) => (a.date > b.date ? -1 : 1));
 

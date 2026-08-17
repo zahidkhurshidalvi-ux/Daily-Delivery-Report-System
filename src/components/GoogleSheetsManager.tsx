@@ -8,7 +8,7 @@ import {
   SystemLog,
   GoogleSheetsConfig,
 } from '../types';
-import { formatDatePK } from '../utils/calculations';
+import { formatDatePK, cleanAndFilterPostOffices, cleanAndFilterReports } from '../utils/calculations';
 import {
   requestGoogleOAuthToken,
   getGoogleAccessToken,
@@ -588,6 +588,7 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
           parsedResults.push(po);
         }
       }
+      setParsedItemsPreview(cleanAndFilterPostOffices(parsedResults));
     } else if (pasteCategory === 'reports') {
       for (let i = startIndex; i < rawMatrix.length; i++) {
         const rep = smartParseReportRow(rawMatrix[i], colMap, i);
@@ -595,6 +596,7 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
           parsedResults.push(rep);
         }
       }
+      setParsedItemsPreview(cleanAndFilterReports(parsedResults));
     } else if (pasteCategory === 'users') {
       for (let i = startIndex; i < rawMatrix.length; i++) {
         const u = smartParseUserRow(rawMatrix[i], colMap, i);
@@ -602,9 +604,8 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
           parsedResults.push(u);
         }
       }
+      setParsedItemsPreview(parsedResults);
     }
-
-    setParsedItemsPreview(parsedResults);
 
     if (parsedResults.length > 0) {
       setStatusMessage({
@@ -628,7 +629,6 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
 
     try {
       if (pasteCategory === 'offices') {
-        const existingNames = new Set(postOffices.map((po) => po.name.toLowerCase().trim()));
         const mergedOffices = [...postOffices];
 
         parsedItemsPreview.forEach((newPo: PostOffice) => {
@@ -642,34 +642,31 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
           }
         });
 
-        // Sort A to Z
-        mergedOffices.sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-        );
+        const cleanMergedOffices = cleanAndFilterPostOffices(mergedOffices);
 
         if (onUpdateAllDatabase) {
-          onUpdateAllDatabase({ postOffices: mergedOffices });
+          onUpdateAllDatabase({ postOffices: cleanMergedOffices });
         }
 
         // If Google Sheet is connected, auto-push to Google Sheet!
         if (config.webhookUrl) {
           await saveDatabaseViaWebhook(config.webhookUrl, {
             ...fullDatabasePayload,
-            postOffices: mergedOffices,
+            postOffices: cleanMergedOffices,
           }).catch(() => {});
         } else if (config.spreadsheetId) {
           const token = getGoogleAccessToken();
           if (token) {
             await pushFullDatabaseToGoogleSheet(config.spreadsheetId, token, {
               ...fullDatabasePayload,
-              postOffices: mergedOffices,
+              postOffices: cleanMergedOffices,
             }).catch(() => {});
           }
         }
 
         setStatusMessage({
           type: 'success',
-          text: `✓ Successfully ingested ${parsedItemsPreview.length} Post Offices into live portal & Google Sheet! Total Offices: ${mergedOffices.length}.`,
+          text: `✓ Successfully ingested ${parsedItemsPreview.length} Post Offices into live portal & Google Sheet! Total Offices: ${cleanMergedOffices.length}.`,
         });
         onAddLog(
           'PASTE_INGEST_OFFICES',
@@ -689,21 +686,23 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
           }
         });
 
+        const cleanMergedReports = cleanAndFilterReports(mergedReports);
+
         if (onUpdateAllDatabase) {
-          onUpdateAllDatabase({ reports: mergedReports });
+          onUpdateAllDatabase({ reports: cleanMergedReports });
         }
 
         if (config.webhookUrl) {
           await saveDatabaseViaWebhook(config.webhookUrl, {
             ...fullDatabasePayload,
-            reports: mergedReports,
+            reports: cleanMergedReports,
           }).catch(() => {});
         } else if (config.spreadsheetId) {
           const token = getGoogleAccessToken();
           if (token) {
             await pushFullDatabaseToGoogleSheet(config.spreadsheetId, token, {
               ...fullDatabasePayload,
-              reports: mergedReports,
+              reports: cleanMergedReports,
             }).catch(() => {});
           }
         }

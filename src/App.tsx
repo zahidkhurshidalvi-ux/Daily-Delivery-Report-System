@@ -21,7 +21,13 @@ import { UserManagement } from './components/UserManagement';
 import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
 import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
-import { getTodayDateString, calculateClosingBalance } from './utils/calculations';
+import {
+  getTodayDateString,
+  calculateClosingBalance,
+  cleanAndFilterPostOffices,
+  cleanAndFilterReports,
+  isInvalidPostOfficeName,
+} from './utils/calculations';
 import {
   dispatchReportSync,
   dispatchReportDelete,
@@ -46,9 +52,7 @@ export default function App() {
   const [postOffices, setPostOffices] = useState<PostOffice[]>(() => {
     const saved = localStorage.getItem('pakpost_offices');
     const rawList: PostOffice[] = saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
-    return [...rawList].sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-    );
+    return cleanAndFilterPostOffices(rawList);
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -58,7 +62,8 @@ export default function App() {
 
   const [reports, setReports] = useState<DailyReport[]>(() => {
     const saved = localStorage.getItem('pakpost_reports');
-    return saved ? JSON.parse(saved) : INITIAL_REPORTS;
+    const rawList: DailyReport[] = saved ? JSON.parse(saved) : INITIAL_REPORTS;
+    return cleanAndFilterReports(rawList);
   });
 
   const [whatsAppConfig, setWhatsAppConfig] = useState<WhatsAppConfig>(() => {
@@ -123,13 +128,9 @@ export default function App() {
     whatsAppConfig?: WhatsAppConfig;
     triggerConfig?: TriggerConfig;
   }) => {
-    if (data.reports) setReports(data.reports);
+    if (data.reports) setReports(cleanAndFilterReports(data.reports));
     if (data.postOffices) {
-      setPostOffices(
-        [...data.postOffices].sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-        )
-      );
+      setPostOffices(cleanAndFilterPostOffices(data.postOffices));
     }
     if (data.users) setUsers(data.users);
     if (data.whatsAppConfig) setWhatsAppConfig(data.whatsAppConfig);
@@ -145,14 +146,10 @@ export default function App() {
         try {
           const res = await fetchDatabaseViaWebhook(googleSheetsConfig.webhookUrl);
           if (res.postOffices && res.postOffices.length > 0) {
-            setPostOffices(
-              [...res.postOffices].sort((a, b) =>
-                a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-              )
-            );
+            setPostOffices(cleanAndFilterPostOffices(res.postOffices));
           }
           if (res.reports && res.reports.length > 0) {
-            setReports(res.reports);
+            setReports(cleanAndFilterReports(res.reports));
           }
           if (res.users && res.users.length > 0) {
             setUsers(res.users);
@@ -169,14 +166,10 @@ export default function App() {
           try {
             const res = await fetchFullDatabaseFromGoogleSheet(googleSheetsConfig.spreadsheetId, token);
             if (res.postOffices && res.postOffices.length > 0) {
-              setPostOffices(
-                [...res.postOffices].sort((a, b) =>
-                  a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-                )
-              );
+              setPostOffices(cleanAndFilterPostOffices(res.postOffices));
             }
             if (res.reports && res.reports.length > 0) {
-              setReports(res.reports);
+              setReports(cleanAndFilterReports(res.reports));
             }
             if (res.users && res.users.length > 0) {
               setUsers(res.users);
@@ -197,7 +190,7 @@ export default function App() {
     const savedReports = localStorage.getItem('pakpost_reports');
     if (savedReports) {
       try {
-        setReports(JSON.parse(savedReports));
+        setReports(cleanAndFilterReports(JSON.parse(savedReports)));
       } catch (e) {
         console.error('Failed to parse saved reports:', e);
       }
@@ -205,7 +198,7 @@ export default function App() {
     const savedOffices = localStorage.getItem('pakpost_offices');
     if (savedOffices) {
       try {
-        setPostOffices(JSON.parse(savedOffices));
+        setPostOffices(cleanAndFilterPostOffices(JSON.parse(savedOffices)));
       } catch (e) {
         console.error('Failed to parse saved offices:', e);
       }
@@ -217,14 +210,10 @@ export default function App() {
       try {
         const res = await fetchDatabaseViaWebhook(googleSheetsConfig.webhookUrl);
         if (res.postOffices && res.postOffices.length > 0) {
-          setPostOffices(
-            [...res.postOffices].sort((a, b) =>
-              a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-            )
-          );
+          setPostOffices(cleanAndFilterPostOffices(res.postOffices));
         }
         if (res.reports && res.reports.length > 0) {
-          setReports(res.reports);
+          setReports(cleanAndFilterReports(res.reports));
         }
         if (res.users && res.users.length > 0) {
           setUsers(res.users);
@@ -239,14 +228,10 @@ export default function App() {
         try {
           const res = await fetchFullDatabaseFromGoogleSheet(googleSheetsConfig.spreadsheetId, token);
           if (res.postOffices && res.postOffices.length > 0) {
-            setPostOffices(
-              [...res.postOffices].sort((a, b) =>
-                a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-              )
-            );
+            setPostOffices(cleanAndFilterPostOffices(res.postOffices));
           }
           if (res.reports && res.reports.length > 0) {
-            setReports(res.reports);
+            setReports(cleanAndFilterReports(res.reports));
           }
           if (res.users && res.users.length > 0) {
             setUsers(res.users);
@@ -423,23 +408,21 @@ export default function App() {
 
   // Master Data Office CRUD (Always kept in Alphabetical A-Z Ascending Order & synced to Google Sheet)
   const handleSaveOffice = (office: PostOffice) => {
+    if (!office.name || isInvalidPostOfficeName(office.name)) return;
     let updated: PostOffice[];
-    const exists = postOffices.some((p) => p.id === office.id);
+    const exists = postOffices.some((p) => p.id === office.id || p.name.toLowerCase() === office.name.toLowerCase());
     if (exists) {
-      updated = postOffices
-        .map((p) => (p.id === office.id ? office : p))
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
+      updated = postOffices.map((p) => (p.id === office.id || p.name.toLowerCase() === office.name.toLowerCase() ? office : p));
       logAction('MASTER_OFFICE_UPDATE', `Updated office master record for ${office.name}`);
     } else {
-      updated = [...postOffices, office].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-      );
+      updated = [...postOffices, office];
       logAction('MASTER_OFFICE_ADD', `Added new post office: ${office.name}`);
     }
-    setPostOffices(updated);
+    const cleaned = cleanAndFilterPostOffices(updated);
+    setPostOffices(cleaned);
 
     if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, updated).catch((err) => {
+      dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
         console.warn('Google Sheets offices sync error:', err);
       });
     }
@@ -449,11 +432,12 @@ export default function App() {
     const updated = postOffices.map((p) =>
       p.id === officeId ? { ...p, status: p.status === 'ACTIVE' ? ('INACTIVE' as const) : ('ACTIVE' as const) } : p
     );
-    setPostOffices(updated);
+    const cleaned = cleanAndFilterPostOffices(updated);
+    setPostOffices(cleaned);
     logAction('MASTER_STATUS_TOGGLE', `Toggled office status for ID ${officeId}`);
 
     if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, updated).catch((err) => {
+      dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
         console.warn('Google Sheets offices sync error:', err);
       });
     }
@@ -462,36 +446,36 @@ export default function App() {
   const handleDeleteOffice = (officeId: string) => {
     const target = postOffices.find((p) => p.id === officeId);
     const updated = postOffices.filter((p) => p.id !== officeId);
-    setPostOffices(updated);
+    const cleaned = cleanAndFilterPostOffices(updated);
+    setPostOffices(cleaned);
     logAction('MASTER_OFFICE_DELETE', `Deleted post office: ${target?.name || officeId}`, 'WARNING');
 
     if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, updated).catch((err) => {
+      dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
         console.warn('Google Sheets offices sync error:', err);
       });
     }
   };
 
   const handleBulkImportOffices = (imported: PostOffice[], replaceExisting: boolean) => {
+    const validImported = cleanAndFilterPostOffices(imported);
     let combined: PostOffice[];
     if (replaceExisting) {
-      combined = imported;
+      combined = validImported;
     } else {
       const existingNames = new Set(postOffices.map((p) => p.name.toLowerCase()));
-      const newOnes = imported.filter((p) => !existingNames.has(p.name.toLowerCase()));
+      const newOnes = validImported.filter((p) => !existingNames.has(p.name.toLowerCase()));
       combined = [...postOffices, ...newOnes];
     }
-    const sorted = combined.sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-    );
-    setPostOffices(sorted);
+    const cleaned = cleanAndFilterPostOffices(combined);
+    setPostOffices(cleaned);
     logAction(
       'MASTER_OFFICE_BULK_IMPORT',
-      `Imported ${imported.length} offices (${replaceExisting ? 'Replaced existing' : 'Appended'})`
+      `Imported ${validImported.length} offices (${replaceExisting ? 'Replaced existing' : 'Appended'})`
     );
 
     if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, sorted).catch((err) => {
+      dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
         console.warn('Google Sheets offices bulk sync error:', err);
       });
     }

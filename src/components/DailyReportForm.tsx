@@ -6,6 +6,7 @@ import {
   formatNumber,
   getTodayDateString,
   formatDatePK,
+  cleanAndFilterPostOffices,
 } from '../utils/calculations';
 import { AlertCircle, CheckCircle2, Calculator, Save, FileText, Search } from 'lucide-react';
 
@@ -28,10 +29,8 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 }) => {
   const today = getTodayDateString();
 
-  // Always sort post offices in ascending alphabetical order (A to Z)
-  const sortedPostOffices = [...postOffices].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-  );
+  // Always sort clean post offices in ascending alphabetical order (A to Z)
+  const sortedPostOffices = cleanAndFilterPostOffices(postOffices);
 
   // Check URL parameter for pre-selected post office
   const getUrlOfficeName = () => {

@@ -4,6 +4,8 @@ import {
   formatDatePK,
   getTodayDateString,
   getMissingDatesForOffice,
+  cleanAndFilterPostOffices,
+  cleanAndFilterReports,
 } from '../utils/calculations';
 import {
   getUrduReminderTemplate,
@@ -54,19 +56,22 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   whatsAppConfig,
   onLogAction,
 }) => {
-  const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
-  const dateReports = reports.filter((r) => r.date === selectedDate);
+  const validOffices = cleanAndFilterPostOffices(postOffices);
+  const validReports = cleanAndFilterReports(reports);
+
+  const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
+  const dateReports = validReports.filter((r) => r.date === selectedDate);
   const submittedOfficeNames = new Set(dateReports.map((r) => r.officeName));
 
   const pendingList = activeOffices
     .filter((po) => !submittedOfficeNames.has(po.name))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
     .map((office) => {
-      const pastReports = reports
+      const pastReports = validReports
         .filter((r) => r.officeName === office.name)
         .sort((a, b) => (a.date > b.date ? -1 : 1));
 
-      const missingDates = getMissingDatesForOffice(office.name, selectedDate, reports);
+      const missingDates = getMissingDatesForOffice(office.name, selectedDate, validReports);
 
       return {
         office,

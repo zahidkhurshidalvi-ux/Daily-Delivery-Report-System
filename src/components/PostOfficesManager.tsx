@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { PostOffice } from '../types';
+import { cleanAndFilterPostOffices, isInvalidPostOfficeName } from '../utils/calculations';
 import {
   Building,
   Plus,
@@ -56,7 +57,8 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
   const [mobileNumber, setMobileNumber] = useState('');
   const [initialBalance, setInitialBalance] = useState(0);
 
-  const filteredOffices = [...postOffices]
+  const cleanOfficesList = cleanAndFilterPostOffices(postOffices);
+  const filteredOffices = cleanOfficesList
     .filter(
       (po) =>
         po.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,9 +87,12 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanName = name.trim();
+    if (!cleanName || isInvalidPostOfficeName(cleanName)) return;
+
     const officeToSave: PostOffice = {
       id: editingOffice ? editingOffice.id : `po-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      name: name.trim(),
+      name: cleanName,
       postmasterName: postmasterName.trim() || 'Postmaster',
       mobileNumber: mobileNumber.trim() || '03000000000',
       status: editingOffice ? editingOffice.status : 'ACTIVE',
@@ -112,21 +117,22 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
       const poMobile = parts[1] || `030012345${String(idx + 1).padStart(2, '0')}`;
       const poMaster = parts[2] || 'Postmaster';
 
-      if (poName) {
+      if (poName && !isInvalidPostOfficeName(poName)) {
         parsedOffices.push({
           id: `po-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
           name: poName,
-          postmasterName: poMaster,
-          mobileNumber: poMobile,
+          postmasterName: isInvalidPostOfficeName(poMaster) ? 'Postmaster' : poMaster,
+          mobileNumber: poMobile.toLowerCase().includes('mobile') ? '03001234567' : poMobile,
           status: 'ACTIVE',
           initialBalance: 0,
         });
       }
     });
 
-    if (parsedOffices.length > 0 && onBulkImportOffices) {
-      onBulkImportOffices(parsedOffices, bulkMode === 'replace');
-      setImportSuccessMsg(`Successfully imported ${parsedOffices.length} post offices!`);
+    const validBatch = cleanAndFilterPostOffices(parsedOffices);
+    if (validBatch.length > 0 && onBulkImportOffices) {
+      onBulkImportOffices(validBatch, bulkMode === 'replace');
+      setImportSuccessMsg(`Successfully imported ${validBatch.length} post offices!`);
       setTimeout(() => {
         setIsBulkModalOpen(false);
         setImportSuccessMsg('');

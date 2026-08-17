@@ -17,7 +17,12 @@ import {
   SystemLog,
   GoogleSheetsConfig,
 } from '../types';
-import { formatDatePK } from './calculations';
+import {
+  formatDatePK,
+  isInvalidPostOfficeName,
+  cleanAndFilterPostOffices,
+  cleanAndFilterReports,
+} from './calculations';
 
 // Initialize Firebase App & Auth
 const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -36,25 +41,23 @@ export const SHEETS_SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
 ].join(' ');
 
-// Token & User Storage (In-memory caching per guidelines)
+// Token & User Storage (Persisted across browser/tab restarts & reboots)
 let inMemoryToken: string | null = null;
 let tokenExpiryTimestamp: number | null = null;
 let currentUser: FirebaseUser | null = null;
 let isSigningIn = false;
 
-// Listen to auth state changes to clear/maintain session
+// Listen to auth state changes
 onAuthStateChanged(firebaseAuth, (user) => {
   currentUser = user;
-  if (!user && !isSigningIn) {
-    inMemoryToken = null;
-    tokenExpiryTimestamp = null;
-  }
 });
 
 export const setGoogleAccessToken = (token: string, expiresInSeconds = 3500) => {
   inMemoryToken = token;
   tokenExpiryTimestamp = Date.now() + expiresInSeconds * 1000;
   try {
+    localStorage.setItem('pak_post_google_token', token);
+    localStorage.setItem('pak_post_google_token_exp', tokenExpiryTimestamp.toString());
     sessionStorage.setItem('pak_post_google_token', token);
     sessionStorage.setItem('pak_post_google_token_exp', tokenExpiryTimestamp.toString());
   } catch (e) {
@@ -67,8 +70,11 @@ export const getGoogleAccessToken = (): string | null => {
     return inMemoryToken;
   }
   try {
-    const storedToken = sessionStorage.getItem('pak_post_google_token');
-    const storedExp = sessionStorage.getItem('pak_post_google_token_exp');
+    const storedToken =
+      localStorage.getItem('pak_post_google_token') || sessionStorage.getItem('pak_post_google_token');
+    const storedExp =
+      localStorage.getItem('pak_post_google_token_exp') ||
+      sessionStorage.getItem('pak_post_google_token_exp');
     if (storedToken && storedExp && Date.now() < parseInt(storedExp, 10)) {
       inMemoryToken = storedToken;
       tokenExpiryTimestamp = parseInt(storedExp, 10);
@@ -85,6 +91,8 @@ export const clearGoogleToken = async () => {
   tokenExpiryTimestamp = null;
   currentUser = null;
   try {
+    localStorage.removeItem('pak_post_google_token');
+    localStorage.removeItem('pak_post_google_token_exp');
     sessionStorage.removeItem('pak_post_google_token');
     sessionStorage.removeItem('pak_post_google_token_exp');
     await signOut(firebaseAuth);
@@ -363,7 +371,7 @@ export const smartParseOfficeRow = (
   if (colMap) {
     const nameCol = colMap.name ?? colMap.office ?? colMap.officename ?? colMap.postoffice;
     const name = nameCol !== undefined && row[nameCol] ? String(row[nameCol]).trim() : '';
-    if (!name || norm(name).includes('postofficename') || norm(name).includes('pakistanpost')) return null;
+    if (!name || isInvalidPostOfficeName(name)) return null;
 
     const pmCol = colMap.postmaster ?? colMap.incharge ?? colMap.pm ?? colMap.operator;
     const mobCol = colMap.mobile ?? colMap.phone ?? colMap.whatsapp ?? colMap.contact ?? colMap.cell;
@@ -371,11 +379,14 @@ export const smartParseOfficeRow = (
     const balCol = colMap.initialbalance ?? colMap.balance ?? colMap.openingbalance ?? colMap.bal;
     const idCol = colMap.id ?? colMap.officeid ?? colMap.sno ?? colMap.sr;
 
+    const rawPm = pmCol !== undefined && row[pmCol] ? String(row[pmCol]).trim() : 'Postmaster';
+    const rawMob = mobCol !== undefined && row[mobCol] ? String(row[mobCol]).trim() : '03001234567';
+
     return {
-      id: idCol !== undefined && row[idCol] ? String(row[idCol]) : `po-${rowIndex + 1}`,
+      id: idCol !== undefined && row[idCol] && !isInvalidPostOfficeName(row[idCol]) ? String(row[idCol]) : `po-${rowIndex + 1}`,
       name,
-      postmasterName: pmCol !== undefined && row[pmCol] ? String(row[pmCol]).trim() : 'Postmaster',
-      mobileNumber: mobCol !== undefined && row[mobCol] ? String(row[mobCol]).trim() : '03001234567',
+      postmasterName: isInvalidPostOfficeName(rawPm) ? 'Postmaster' : rawPm,
+      mobileNumber: rawMob.toLowerCase().includes('mobile') || rawMob.toLowerCase().includes('phone') ? '03001234567' : rawMob,
       status: statusCol !== undefined && String(row[statusCol]).toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
       initialBalance: balCol !== undefined ? Number(row[balCol]) || 0 : 0,
     };
@@ -384,26 +395,36 @@ export const smartParseOfficeRow = (
   // Fallback positional heuristics
   // [Sr, ID, Name, PM, Mobile, Status, Balance]
   if (row.length >= 3 && row[2] && typeof row[2] === 'string' && isNaN(Number(row[2]))) {
-    return {
-      id: row[1] ? String(row[1]) : `po-${rowIndex + 1}`,
-      name: String(row[2]).trim(),
-      postmasterName: row[3] ? String(row[3]).trim() : 'Postmaster',
-      mobileNumber: row[4] ? String(row[4]).trim() : '03001234567',
-      status: String(row[5] || '').toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
-      initialBalance: Number(row[6]) || 0,
-    };
+    const name = String(row[2]).trim();
+    if (!isInvalidPostOfficeName(name)) {
+      const rawPm = row[3] ? String(row[3]).trim() : 'Postmaster';
+      const rawMob = row[4] ? String(row[4]).trim() : '03001234567';
+      return {
+        id: row[1] && !isInvalidPostOfficeName(row[1]) ? String(row[1]) : `po-${rowIndex + 1}`,
+        name,
+        postmasterName: isInvalidPostOfficeName(rawPm) ? 'Postmaster' : rawPm,
+        mobileNumber: rawMob.toLowerCase().includes('mobile') ? '03001234567' : rawMob,
+        status: String(row[5] || '').toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
+        initialBalance: Number(row[6]) || 0,
+      };
+    }
   }
 
   // If user pasted starting from column A: [Name, PM, Mobile, Status, Balance]
-  if (row[0] && typeof row[0] === 'string' && isNaN(Number(row[0])) && !norm(row[0]).includes('office') && !norm(row[0]).includes('sr')) {
-    return {
-      id: `po-${rowIndex + 1}`,
-      name: String(row[0]).trim(),
-      postmasterName: row[1] ? String(row[1]).trim() : 'Postmaster',
-      mobileNumber: row[2] ? String(row[2]).trim() : '03001234567',
-      status: String(row[3] || '').toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
-      initialBalance: Number(row[4]) || 0,
-    };
+  if (row[0] && typeof row[0] === 'string' && isNaN(Number(row[0]))) {
+    const name = String(row[0]).trim();
+    if (!isInvalidPostOfficeName(name)) {
+      const rawPm = row[1] ? String(row[1]).trim() : 'Postmaster';
+      const rawMob = row[2] ? String(row[2]).trim() : '03001234567';
+      return {
+        id: `po-${rowIndex + 1}`,
+        name,
+        postmasterName: isInvalidPostOfficeName(rawPm) ? 'Postmaster' : rawPm,
+        mobileNumber: rawMob.toLowerCase().includes('mobile') ? '03001234567' : rawMob,
+        status: String(row[3] || '').toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
+        initialBalance: Number(row[4]) || 0,
+      };
+    }
   }
 
   return null;
@@ -422,10 +443,11 @@ export const smartParseReportRow = (
   if (colMap) {
     const officeCol = colMap.office ?? colMap.officename ?? colMap.postoffice ?? colMap.postofficename ?? colMap.name;
     const officeName = officeCol !== undefined && row[officeCol] ? String(row[officeCol]).trim() : '';
-    if (!officeName || norm(officeName).includes('postofficename') || norm(officeName).includes('pakistanpost')) return null;
+    if (!officeName || isInvalidPostOfficeName(officeName)) return null;
 
     const dateCol = colMap.date ?? colMap.reportdate ?? colMap.day;
     const dateVal = dateCol !== undefined && row[dateCol] ? String(row[dateCol]).trim() : new Date().toISOString().split('T')[0];
+    if (isInvalidPostOfficeName(dateVal) || dateVal.toLowerCase().includes('date')) return null;
     
     // Normalize date format if in DD/MM/YYYY
     let cleanDate = dateVal;
@@ -457,10 +479,10 @@ export const smartParseReportRow = (
     const close = closeCol !== undefined && row[closeCol] !== undefined && row[closeCol] !== '' ? Number(row[closeCol]) || 0 : calculatedClose;
 
     return {
-      id: idCol !== undefined && row[idCol] ? String(row[idCol]) : `rep-${Date.now()}-${rowIndex}`,
+      id: idCol !== undefined && row[idCol] && !isInvalidPostOfficeName(row[idCol]) ? String(row[idCol]) : `rep-${Date.now()}-${rowIndex}`,
       date: cleanDate,
       officeName,
-      postmasterName: pmCol !== undefined && row[pmCol] ? String(row[pmCol]).trim() : 'Postmaster',
+      postmasterName: pmCol !== undefined && row[pmCol] && !isInvalidPostOfficeName(row[pmCol]) ? String(row[pmCol]).trim() : 'Postmaster',
       lastBalance: lastBal,
       receivedToday: rec,
       delivered: del,
@@ -480,7 +502,7 @@ export const smartParseReportRow = (
     // If office name is in column 3 (index 3)
     if (row[3] && typeof row[3] === 'string' && isNaN(Number(row[3]))) {
       const officeName = String(row[3]).trim();
-      if (!norm(officeName).includes('postofficename') && !norm(officeName).includes('pakistanpost')) {
+      if (!isInvalidPostOfficeName(officeName)) {
         const lastBal = Number(row[5]) || 0;
         const rec = Number(row[6]) || 0;
         const del = Number(row[8]) || 0;
@@ -490,10 +512,10 @@ export const smartParseReportRow = (
         const close = Number(row[13]) || (lastBal + rec - del - ret - miss - dep);
 
         return {
-          id: row[1] ? String(row[1]) : `rep-${Date.now()}-${rowIndex}`,
+          id: row[1] && !isInvalidPostOfficeName(row[1]) ? String(row[1]) : `rep-${Date.now()}-${rowIndex}`,
           date: row[2] ? String(row[2]) : new Date().toISOString().split('T')[0],
           officeName,
-          postmasterName: row[4] ? String(row[4]) : 'Postmaster',
+          postmasterName: row[4] && !isInvalidPostOfficeName(row[4]) ? String(row[4]) : 'Postmaster',
           lastBalance: lastBal,
           receivedToday: rec,
           delivered: del,
@@ -511,12 +533,12 @@ export const smartParseReportRow = (
     // Direct pasted without Sr & ID: [Date, OfficeName, Postmaster, LastBal, Rec, Del, Ret, Miss, Dep, Close]
     if (row[1] && typeof row[1] === 'string' && isNaN(Number(row[1]))) {
       const officeName = String(row[1]).trim();
-      if (!norm(officeName).includes('office') && !norm(officeName).includes('pakistanpost')) {
+      if (!isInvalidPostOfficeName(officeName)) {
         return {
           id: `rep-${Date.now()}-${rowIndex}`,
           date: String(row[0] || new Date().toISOString().split('T')[0]),
           officeName,
-          postmasterName: row[2] ? String(row[2]) : 'Postmaster',
+          postmasterName: row[2] && !isInvalidPostOfficeName(row[2]) ? String(row[2]) : 'Postmaster',
           lastBalance: Number(row[3]) || 0,
           receivedToday: Number(row[4]) || 0,
           delivered: Number(row[5]) || 0,
@@ -1238,7 +1260,13 @@ export const fetchFullDatabaseFromGoogleSheet = async (
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
   );
 
-  return { reports, postOffices, users, whatsAppConfig, triggerConfig };
+  return {
+    reports: cleanAndFilterReports(reports),
+    postOffices: cleanAndFilterPostOffices(postOffices),
+    users,
+    whatsAppConfig,
+    triggerConfig,
+  };
 };
 
 /**
@@ -1963,8 +1991,8 @@ export const fetchDatabaseViaWebhook = async (
   const json = await resp.json();
   const data = json.data || {};
   return {
-    reports: data.reports || [],
-    postOffices: data.postOffices || [],
+    reports: cleanAndFilterReports(data.reports || []),
+    postOffices: cleanAndFilterPostOffices(data.postOffices || []),
     users: data.users || [],
   };
 };

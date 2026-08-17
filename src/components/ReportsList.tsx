@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DailyReport, PostOffice, User } from '../types';
-import { formatNumber, formatDatePK, getTodayDateString } from '../utils/calculations';
+import { formatNumber, formatDatePK, getTodayDateString, cleanAndFilterPostOffices, cleanAndFilterReports } from '../utils/calculations';
 import {
   Edit2,
   Trash2,
@@ -56,19 +56,22 @@ export const ReportsList: React.FC<ReportsListProps> = ({
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  const validOffices = cleanAndFilterPostOffices(postOffices);
+  const validReports = cleanAndFilterReports(reports);
+
   // Extract all unique office names from postOffices or reports
   const officeOptions = Array.from(
     new Set([
-      ...postOffices.map((p) => p.name),
-      ...reports.map((r) => r.officeName),
+      ...validOffices.map((p) => p.name),
+      ...validReports.map((r) => r.officeName),
     ])
   ).sort();
 
   // 1. Role Filtering: Post Office users only see THEIR OWN office reports if restricted
   const roleFilteredReports =
     currentUser?.role === 'POST_OFFICE' && currentUser.officeName
-      ? reports.filter((r) => r.officeName === currentUser.officeName)
-      : reports;
+      ? validReports.filter((r) => r.officeName === currentUser.officeName)
+      : validReports;
 
   // 2. Base Reports
   const baseReports = roleFilteredReports;
