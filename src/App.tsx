@@ -410,9 +410,14 @@ export default function App() {
   const handleSaveOffice = (office: PostOffice) => {
     if (!office.name || isInvalidPostOfficeName(office.name)) return;
     let updated: PostOffice[];
-    const exists = postOffices.some((p) => p.id === office.id || p.name.toLowerCase() === office.name.toLowerCase());
+    const targetNameLower = (office.name || '').toLowerCase().trim();
+    const exists = postOffices.some(
+      (p) => p.id === office.id || (p.name || '').toLowerCase().trim() === targetNameLower
+    );
     if (exists) {
-      updated = postOffices.map((p) => (p.id === office.id || p.name.toLowerCase() === office.name.toLowerCase() ? office : p));
+      updated = postOffices.map((p) =>
+        p.id === office.id || (p.name || '').toLowerCase().trim() === targetNameLower ? office : p
+      );
       logAction('MASTER_OFFICE_UPDATE', `Updated office master record for ${office.name}`);
     } else {
       updated = [...postOffices, office];
@@ -463,8 +468,8 @@ export default function App() {
     if (replaceExisting) {
       combined = validImported;
     } else {
-      const existingNames = new Set(postOffices.map((p) => p.name.toLowerCase()));
-      const newOnes = validImported.filter((p) => !existingNames.has(p.name.toLowerCase()));
+      const existingNames = new Set(postOffices.map((p) => (p.name || '').toLowerCase()));
+      const newOnes = validImported.filter((p) => !existingNames.has((p.name || '').toLowerCase()));
       combined = [...postOffices, ...newOnes];
     }
     const cleaned = cleanAndFilterPostOffices(combined);

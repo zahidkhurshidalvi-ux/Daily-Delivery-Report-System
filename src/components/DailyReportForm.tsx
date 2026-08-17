@@ -37,8 +37,8 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
     try {
       const params = new URLSearchParams(window.location.search);
       const name = params.get('office') || params.get('po');
-      if (name && sortedPostOffices.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
-        return sortedPostOffices.find((p) => p.name.toLowerCase() === name.toLowerCase())?.name || '';
+      if (name && sortedPostOffices.some((p) => (p.name || '').toLowerCase() === name.toLowerCase())) {
+        return sortedPostOffices.find((p) => (p.name || '').toLowerCase() === name.toLowerCase())?.name || '';
       }
     } catch {
       // ignore
@@ -95,13 +95,25 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
     if (officeReports.length > 0) {
       const prev = officeReports[0];
-      const prevBal =
-        prev.deposit > 0
-          ? prev.deposit
-          : Math.max(0, prev.lastBalance + prev.receivedToday - prev.delivered - prev.returnedToSender - prev.missent);
-      setLastBalance(String(prevBal));
+      const prevDeposit = Number(prev.deposit) || 0;
+      const prevCalculated = Math.max(
+        0,
+        (Number(prev.lastBalance) || 0) +
+          (Number(prev.receivedToday) || 0) -
+          (Number(prev.delivered) || 0) -
+          (Number(prev.returnedToSender) || 0) -
+          (Number(prev.missent) || 0)
+      );
+      const prevBal = prevDeposit > 0 ? prevDeposit : prevCalculated;
+      const safeBal = prevBal >= 0 && prevBal < 10000 ? prevBal : 0;
+      setLastBalance(String(safeBal));
     } else {
-      setLastBalance(String(office.initialBalance || 0));
+      // Newly added office without previous reports defaults strictly to 0 articles
+      const initBal =
+        office.initialBalance && Number(office.initialBalance) < 10000
+          ? Math.max(0, Number(office.initialBalance))
+          : 0;
+      setLastBalance(String(initBal));
     }
   }, [selectedOfficeName, date, reports, postOffices, editingReport]);
 
@@ -194,7 +206,9 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       deposit: parsedDeposit,
       closingBalance: 0,
       remarks,
-      submittedBy: currentUser ? currentUser.username : `office_${selectedOffice.name.toLowerCase().replace(/\s+/g, '_')}`,
+      submittedBy: currentUser
+        ? currentUser.username
+        : `office_${(selectedOffice?.name || 'unknown').toLowerCase().replace(/\s+/g, '_')}`,
     };
 
     onSubmitReport(newReport, isEdit);
@@ -269,7 +283,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-bold text-gray-700">
-                Report Date * <span className="text-[#006633] font-semibold">(DD/MM/YYYY)</span>
+                Report Date *
               </label>
               {!editingReport && (
                 <button
@@ -294,7 +308,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-bold text-gray-700">
-                Select Post Office * <span className="text-gray-400 font-normal font-mono">(A-Z Order)</span>
+                Select Post Office *
               </label>
               <button
                 type="button"
@@ -317,8 +331,9 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
                   onChange={(e) => {
                     const q = e.target.value;
                     setOfficeSearchQuery(q);
+                    const qLower = (q || '').toLowerCase();
                     const match = sortedPostOffices.find((po) =>
-                      po.name.toLowerCase().includes(q.toLowerCase())
+                      (po.name || '').toLowerCase().includes(qLower)
                     );
                     if (match && q.trim()) {
                       setSelectedOfficeName(match.name);
@@ -339,7 +354,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
                 .filter((po) =>
                   !officeSearchQuery
                     ? true
-                    : po.name.toLowerCase().includes(officeSearchQuery.toLowerCase())
+                    : (po.name || '').toLowerCase().includes((officeSearchQuery || '').toLowerCase())
                 )
                 .map((po) => (
                   <option key={po.id} value={po.name}>

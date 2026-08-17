@@ -632,8 +632,9 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
         const mergedOffices = [...postOffices];
 
         parsedItemsPreview.forEach((newPo: PostOffice) => {
+          const newNameLower = (newPo.name || '').toLowerCase().trim();
           const idx = mergedOffices.findIndex(
-            (o) => o.name.toLowerCase().trim() === newPo.name.toLowerCase().trim()
+            (o) => (o.name || '').toLowerCase().trim() === newNameLower
           );
           if (idx !== -1) {
             mergedOffices[idx] = { ...mergedOffices[idx], ...newPo };
@@ -719,8 +720,9 @@ export const GoogleSheetsManager: React.FC<GoogleSheetsManagerProps> = ({
       } else if (pasteCategory === 'users') {
         const mergedUsers = [...users];
         parsedItemsPreview.forEach((newU: User) => {
+          const newUsernameLower = (newU.username || '').toLowerCase().trim();
           const existingIdx = mergedUsers.findIndex(
-            (u) => u.username.toLowerCase() === newU.username.toLowerCase()
+            (u) => (u.username || '').toLowerCase().trim() === newUsernameLower
           );
           if (existingIdx !== -1) {
             mergedUsers[existingIdx] = { ...mergedUsers[existingIdx], ...newU };

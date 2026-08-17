@@ -77,11 +77,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({
   const baseReports = roleFilteredReports;
 
   // 3. Search & Filter criteria: Office, Single Date OR Date Range
+  const searchLower = (searchTerm || '').toLowerCase();
   const filteredReports = baseReports.filter((r) => {
     const matchesSearch =
       !searchTerm ||
-      r.officeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (r.remarks && r.remarks.toLowerCase().includes(searchTerm.toLowerCase()));
+      (r.officeName || '').toLowerCase().includes(searchLower) ||
+      (r.remarks && (r.remarks || '').toLowerCase().includes(searchLower));
 
     let matchesDate = true;
     if (dateFilterMode === 'single') {

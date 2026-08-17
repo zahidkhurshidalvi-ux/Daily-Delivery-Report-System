@@ -189,66 +189,91 @@ export function isInvalidPostOfficeName(rawName: any): boolean {
 
   const n = name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  const bannedKeywords = [
+  // Exact header titles that must be discarded
+  const exactHeaders = new Set([
     'postofficename',
     'postoffice',
     'officename',
     'nameofpostoffice',
+    'nameofthepostoffice',
+    'postoffices',
+    'poname',
+    'po',
     'postmasterinchargename',
     'postmasterincharge',
+    'postmastername',
     'postmaster',
     'inchargename',
     'incharge',
     'mobilenumberwhatsapp',
     'mobilenumber',
+    'mobilenowhatsapp',
     'whatsappnumber',
+    'mobilenumberphone',
+    'mobile',
+    'phone',
+    'cell',
+    'whatsapp',
+    'contact',
+    'contactnumber',
+    'contactno',
     'pakistanpost',
+    'pakpost',
+    'reportnotsubmittedtill5pm',
     'reportnotsubmitted',
     'notsubmitted',
-    'submittill',
+    'notsubmittedtill5pm',
+    'submittill5pm',
     'pendingreports',
     'deliveryreport',
+    'deliveryreports',
+    'dailydeliveryreport',
+    'dailydeliveryreports',
     'receivedtoday',
     'lastbalance',
     'closingbalance',
     'initialbalance',
     'openingbalance',
-    'dailydelivery',
+    'deposit',
+    'delivered',
     'totalbalance',
     'subtotal',
     'grandtotal',
     'srno',
     'serialnumber',
-  ];
-
-  for (const keyword of bannedKeywords) {
-    if (n === keyword || n.startsWith(keyword) || n.endsWith(keyword) || (keyword.length >= 7 && n.includes(keyword))) {
-      return true;
-    }
-  }
-
-  // Exact matches
-  const exactHeaders = new Set([
-    'name',
-    'office',
-    'status',
-    'mobile',
-    'phone',
-    'whatsapp',
-    'balance',
-    'date',
-    'total',
-    'remarks',
     'sr',
     'sno',
     'id',
-    'action',
-    'actions',
+    'officeid',
+    'reportid',
+    'status',
+    'state',
     'active',
     'inactive',
+    'action',
+    'actions',
+    'remarks',
+    'date',
+    'reportdate',
+    'timestamp',
+    'submittedat',
+    'submittedby',
+    'user',
+    'username',
+    'password',
   ]);
 
   if (exactHeaders.has(n)) {
+    return true;
+  }
+
+  // Check if it's a reminder placeholder line
+  if (n.includes('reportnotsubmitted') || n.includes('notsubmittedtill') || n.startsWith('reportnot') || n.includes('till5pm')) {
+    return true;
+  }
+
+  // Check if it's a table header starting with "sr#" or "srno"
+  if (/^(sr|sno|serial|id|no)[\#\.\:\s\-_0-9]*$/.test(name.toLowerCase())) {
     return true;
   }
 
@@ -257,6 +282,7 @@ export function isInvalidPostOfficeName(rawName: any): boolean {
 
 /**
  * Filters and sanitizes a list of PostOffices, removing any header rows, duplicates, or empty entries.
+ * Ensures phone numbers are NEVER stored as initial balances.
  */
 export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
   if (!Array.isArray(offices)) return [];
@@ -268,8 +294,29 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
     const trimmedName = String(po.name).trim();
     if (isInvalidPostOfficeName(trimmedName)) continue;
 
-    // Check if postmasterName or mobileNumber is a header
     let pm = String(po.postmasterName || '').trim();
+    let mob = String(po.mobileNumber || '').trim();
+    let initBal = Number(po.initialBalance) || 0;
+
+    // 1. Sanitize Mobile & Initial Balance:
+    // If initialBalance contains a mobile phone number (e.g. >= 10000 or 7+ digits)
+    if (initBal >= 10000 || String(po.initialBalance || '').length >= 7) {
+      const potentialPhone = String(po.initialBalance).trim();
+      if (!mob || mob === '03001234567' || mob === '03000000000' || isInvalidPostOfficeName(mob)) {
+        mob = potentialPhone.startsWith('0') ? potentialPhone : (potentialPhone.length === 10 ? '0' + potentialPhone : potentialPhone);
+      }
+      initBal = 0; // Reset initial balance back to 0 articles
+    }
+
+    // 2. Check if postmasterName is actually a phone number (e.g. 03001234567)
+    if (/^(\+92|92|0)?3[0-9]{9}$/.test(pm.replace(/[\s\-]/g, ''))) {
+      if (!mob || mob === '03001234567' || mob === '03000000000') {
+        mob = pm;
+      }
+      pm = 'Postmaster';
+    }
+
+    // 3. Check if PM is a header string
     if (
       !pm ||
       pm.toLowerCase().includes('postmaster / incharge') ||
@@ -280,13 +327,14 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
       pm = 'Postmaster';
     }
 
-    let mob = String(po.mobileNumber || '').trim();
+    // 4. Check if Mobile is a header string
     if (
       !mob ||
       mob.toLowerCase().includes('mobile') ||
       mob.toLowerCase().includes('whatsapp') ||
       mob.toLowerCase().includes('phone') ||
-      mob.toLowerCase().includes('number')
+      mob.toLowerCase().includes('number') ||
+      isInvalidPostOfficeName(mob)
     ) {
       mob = '03001234567';
     }
@@ -296,11 +344,12 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
       seen.add(key);
       cleaned.push({
         ...po,
+        id: po.id || `po-${Date.now()}-${cleaned.length + 1}`,
         name: trimmedName,
         postmasterName: pm,
         mobileNumber: mob,
         status: po.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
-        initialBalance: Number(po.initialBalance) || 0,
+        initialBalance: initBal >= 0 && initBal < 10000 ? initBal : 0,
       });
     }
   }
@@ -312,10 +361,16 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
 
 /**
  * Filters and sanitizes DailyReports, removing any rows where officeName or date is a header title.
+ * Also ensures numeric fields never hold phone numbers.
  */
 export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
   if (!Array.isArray(reports)) return [];
   const cleaned: DailyReport[] = [];
+
+  const sanitizeArticleCount = (val: any): number => {
+    const num = Number(val) || 0;
+    return num >= 0 && num < 50000 ? num : 0;
+  };
 
   for (const r of reports) {
     if (!r || !r.officeName) continue;
@@ -330,10 +385,25 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
       pm = 'Postmaster';
     }
 
+    const lastBal = sanitizeArticleCount(r.lastBalance);
+    const rec = sanitizeArticleCount(r.receivedToday);
+    const del = sanitizeArticleCount(r.delivered);
+    const ret = sanitizeArticleCount(r.returnedToSender);
+    const miss = sanitizeArticleCount(r.missent);
+    const dep = sanitizeArticleCount(r.deposit);
+    const close = sanitizeArticleCount(r.closingBalance) || Math.max(0, lastBal + rec - del - ret - miss - dep);
+
     cleaned.push({
       ...r,
       officeName: trimmedName,
       postmasterName: pm,
+      lastBalance: lastBal,
+      receivedToday: rec,
+      delivered: del,
+      returnedToSender: ret,
+      missent: miss,
+      deposit: dep,
+      closingBalance: close,
     });
   }
 

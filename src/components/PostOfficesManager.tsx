@@ -58,14 +58,15 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
   const [initialBalance, setInitialBalance] = useState(0);
 
   const cleanOfficesList = cleanAndFilterPostOffices(postOffices);
+  const searchLower = (searchTerm || '').toLowerCase();
   const filteredOffices = cleanOfficesList
     .filter(
       (po) =>
-        po.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        po.postmasterName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        po.mobileNumber.includes(searchTerm)
+        (po.name || '').toLowerCase().includes(searchLower) ||
+        (po.postmasterName || '').toLowerCase().includes(searchLower) ||
+        (po.mobileNumber || '').includes(searchTerm || '')
     )
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
 
   const handleOpenAdd = () => {
     setEditingOffice(null);
@@ -111,18 +112,35 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
     const parsedOffices: PostOffice[] = [];
 
     lines.forEach((line, idx) => {
-      // Check if comma/tab/pipe separated: "Office Name, Mobile, Postmaster"
+      // Check if comma/tab/pipe separated: "Office Name, Mobile, Postmaster" or "Sr, Office Name, Mobile, Postmaster"
       const parts = line.split(/[,|\t]+/).map((p) => p.trim());
-      const poName = parts[0];
-      const poMobile = parts[1] || `030012345${String(idx + 1).padStart(2, '0')}`;
-      const poMaster = parts[2] || 'Postmaster';
+      let poName = parts[0] || '';
+      let poMobile = parts[1] || '';
+      let poMaster = parts[2] || 'Postmaster';
+
+      // If parts[0] is a serial number like "1", "01", etc.
+      if (/^\d+$/.test(poName) && parts.length > 1) {
+        poName = parts[1] || '';
+        poMobile = parts[2] || '';
+        poMaster = parts[3] || 'Postmaster';
+      }
+
+      // If poMobile is not a phone number but poMaster is
+      if (
+        !/^0?3[0-9]{9}$/.test(poMobile.replace(/[\s\-]/g, '')) &&
+        /^0?3[0-9]{9}$/.test(poMaster.replace(/[\s\-]/g, ''))
+      ) {
+        const temp = poMobile;
+        poMobile = poMaster;
+        poMaster = temp || 'Postmaster';
+      }
 
       if (poName && !isInvalidPostOfficeName(poName)) {
         parsedOffices.push({
           id: `po-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
           name: poName,
           postmasterName: isInvalidPostOfficeName(poMaster) ? 'Postmaster' : poMaster,
-          mobileNumber: poMobile.toLowerCase().includes('mobile') ? '03001234567' : poMobile,
+          mobileNumber: poMobile.toLowerCase().includes('mobile') || !poMobile ? `030012345${String(idx + 1).padStart(2, '0')}` : poMobile,
           status: 'ACTIVE',
           initialBalance: 0,
         });

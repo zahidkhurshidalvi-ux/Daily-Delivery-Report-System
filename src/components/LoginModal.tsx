@@ -23,7 +23,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ users, postOffices, onLo
 
     // 1. Check Admin Account
     if (cleanUser.toLowerCase() === 'admin' && cleanPass === 'admin123') {
-      const adminUser = users.find((u) => u.username.toLowerCase() === 'admin') || {
+      const adminUser = users.find((u) => (u.username || '').toLowerCase() === 'admin') || {
         id: 'u-admin',
         username: 'admin',
         passwordHash: 'admin123',
@@ -36,7 +36,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ users, postOffices, onLo
 
     // 2. Check Users list
     const foundUser = users.find(
-      (u) => u.username.toLowerCase() === cleanUser.toLowerCase() && u.passwordHash === cleanPass
+      (u) => (u.username || '').toLowerCase() === cleanUser.toLowerCase() && u.passwordHash === cleanPass
     );
     if (foundUser) {
       onLoginSuccess(foundUser);
@@ -44,23 +44,30 @@ export const LoginModal: React.FC<LoginModalProps> = ({ users, postOffices, onLo
     }
 
     // 3. Check Post Office Master list
-    const foundOffice = postOffices.find(
-      (po) =>
-        (po.username?.toLowerCase() === cleanUser.toLowerCase() || po.code.toLowerCase() === cleanUser.toLowerCase()) &&
-        po.password === cleanPass
-    );
+    const foundOffice = postOffices.find((po) => {
+      const poObj = po as any;
+      const matchUsername = poObj.username && String(poObj.username).toLowerCase() === cleanUser.toLowerCase();
+      const matchCode = poObj.code && String(poObj.code).toLowerCase() === cleanUser.toLowerCase();
+      const matchName = po.name && String(po.name).toLowerCase() === cleanUser.toLowerCase();
+      const matchId = po.id && String(po.id).toLowerCase() === cleanUser.toLowerCase();
+      const matchPass = (poObj.password || 'post123') === cleanPass;
+
+      return (matchUsername || matchCode || matchName || matchId) && matchPass;
+    });
+
     if (foundOffice) {
       if (foundOffice.status === 'INACTIVE') {
         setErrorMessage('This Post Office account is currently INACTIVE. Contact Superintendent.');
         return;
       }
+      const poObj = foundOffice as any;
       onLoginSuccess({
-        id: `u-${foundOffice.code}`,
-        username: foundOffice.username || foundOffice.code,
-        passwordHash: foundOffice.password || 'post123',
+        id: foundOffice.id || `u-${foundOffice.name}`,
+        username: poObj.username || poObj.code || foundOffice.name,
+        passwordHash: poObj.password || 'post123',
         role: 'POST_OFFICE',
-        officeCode: foundOffice.code,
-        name: foundOffice.postmasterName,
+        officeName: foundOffice.name,
+        name: foundOffice.postmasterName || 'Postmaster',
       });
       return;
     }

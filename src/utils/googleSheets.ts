@@ -367,6 +367,12 @@ export const smartParseOfficeRow = (
 ): PostOffice | null => {
   if (!row || row.length === 0) return null;
 
+  // Helper to test if a string looks like a Pakistani phone number
+  const isPhone = (val: any): boolean => {
+    const s = String(val || '').replace(/[\s\-\+\(\)]/g, '');
+    return /^0?3[0-9]{9}$/.test(s) || /^923[0-9]{9}$/.test(s) || (s.length >= 10 && !isNaN(Number(s)));
+  };
+
   // If column map is provided, use mapped columns
   if (colMap) {
     const nameCol = colMap.name ?? colMap.office ?? colMap.officename ?? colMap.postoffice;
@@ -379,50 +385,131 @@ export const smartParseOfficeRow = (
     const balCol = colMap.initialbalance ?? colMap.balance ?? colMap.openingbalance ?? colMap.bal;
     const idCol = colMap.id ?? colMap.officeid ?? colMap.sno ?? colMap.sr;
 
-    const rawPm = pmCol !== undefined && row[pmCol] ? String(row[pmCol]).trim() : 'Postmaster';
-    const rawMob = mobCol !== undefined && row[mobCol] ? String(row[mobCol]).trim() : '03001234567';
+    let rawPm = pmCol !== undefined && row[pmCol] ? String(row[pmCol]).trim() : 'Postmaster';
+    let rawMob = mobCol !== undefined && row[mobCol] ? String(row[mobCol]).trim() : '03001234567';
+    let rawBal = balCol !== undefined ? Number(row[balCol]) || 0 : 0;
+
+    // If balance was mistakenly mapped to a phone number
+    if (rawBal >= 10000) {
+      if (rawMob === '03001234567') {
+        rawMob = '0' + String(rawBal);
+      }
+      rawBal = 0;
+    }
+
+    if (isPhone(rawPm)) {
+      if (rawMob === '03001234567') rawMob = rawPm;
+      rawPm = 'Postmaster';
+    }
 
     return {
       id: idCol !== undefined && row[idCol] && !isInvalidPostOfficeName(row[idCol]) ? String(row[idCol]) : `po-${rowIndex + 1}`,
       name,
       postmasterName: isInvalidPostOfficeName(rawPm) ? 'Postmaster' : rawPm,
-      mobileNumber: rawMob.toLowerCase().includes('mobile') || rawMob.toLowerCase().includes('phone') ? '03001234567' : rawMob,
+      mobileNumber: String(rawMob || '').toLowerCase().includes('mobile') || String(rawMob || '').toLowerCase().includes('phone') ? '03001234567' : rawMob,
       status: statusCol !== undefined && String(row[statusCol]).toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
-      initialBalance: balCol !== undefined ? Number(row[balCol]) || 0 : 0,
+      initialBalance: rawBal >= 0 && rawBal < 10000 ? rawBal : 0,
     };
   }
 
-  // Fallback positional heuristics
-  // [Sr, ID, Name, PM, Mobile, Status, Balance]
+  // Fallback positional heuristics:
+  // Layout A: [Sr, ID, Name, PM, Mobile, Status, Balance]
   if (row.length >= 3 && row[2] && typeof row[2] === 'string' && isNaN(Number(row[2]))) {
     const name = String(row[2]).trim();
     if (!isInvalidPostOfficeName(name)) {
-      const rawPm = row[3] ? String(row[3]).trim() : 'Postmaster';
-      const rawMob = row[4] ? String(row[4]).trim() : '03001234567';
+      let rawPm = row[3] ? String(row[3]).trim() : 'Postmaster';
+      let rawMob = row[4] ? String(row[4]).trim() : '03001234567';
+      let rawBal = Number(row[6]) || 0;
+
+      if (isPhone(rawPm)) {
+        if (rawMob === '03001234567') rawMob = rawPm;
+        rawPm = 'Postmaster';
+      }
+      if (rawBal >= 10000) {
+        if (rawMob === '03001234567') rawMob = '0' + String(rawBal);
+        rawBal = 0;
+      }
+
       return {
         id: row[1] && !isInvalidPostOfficeName(row[1]) ? String(row[1]) : `po-${rowIndex + 1}`,
         name,
         postmasterName: isInvalidPostOfficeName(rawPm) ? 'Postmaster' : rawPm,
-        mobileNumber: rawMob.toLowerCase().includes('mobile') ? '03001234567' : rawMob,
+        mobileNumber: String(rawMob || '').toLowerCase().includes('mobile') ? '03001234567' : rawMob,
         status: String(row[5] || '').toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
-        initialBalance: Number(row[6]) || 0,
+        initialBalance: rawBal >= 0 && rawBal < 10000 ? rawBal : 0,
       };
     }
   }
 
-  // If user pasted starting from column A: [Name, PM, Mobile, Status, Balance]
+  // Layout B: [Sr, Name, Mobile] or [Sr, Name, PM, Mobile]
+  if (row.length >= 2 && row[1] && typeof row[1] === 'string' && isNaN(Number(row[1]))) {
+    const name = String(row[1]).trim();
+    if (!isInvalidPostOfficeName(name)) {
+      let rawPm = 'Postmaster';
+      let rawMob = '03001234567';
+
+      if (row[2]) {
+        const val2 = String(row[2]).trim();
+        if (isPhone(val2)) {
+          rawMob = val2;
+        } else if (!isInvalidPostOfficeName(val2)) {
+          rawPm = val2;
+        }
+      }
+      if (row[3]) {
+        const val3 = String(row[3]).trim();
+        if (isPhone(val3)) {
+          rawMob = val3;
+        }
+      }
+
+      return {
+        id: `po-${rowIndex + 1}`,
+        name,
+        postmasterName: rawPm,
+        mobileNumber: rawMob,
+        status: 'ACTIVE',
+        initialBalance: 0,
+      };
+    }
+  }
+
+  // Layout C: [Name, Mobile] or [Name, PM, Mobile, Status, Balance]
   if (row[0] && typeof row[0] === 'string' && isNaN(Number(row[0]))) {
     const name = String(row[0]).trim();
     if (!isInvalidPostOfficeName(name)) {
-      const rawPm = row[1] ? String(row[1]).trim() : 'Postmaster';
-      const rawMob = row[2] ? String(row[2]).trim() : '03001234567';
+      let rawPm = 'Postmaster';
+      let rawMob = '03001234567';
+      let rawBal = 0;
+
+      if (row[1]) {
+        const val1 = String(row[1]).trim();
+        if (isPhone(val1)) {
+          rawMob = val1;
+        } else if (!isInvalidPostOfficeName(val1)) {
+          rawPm = val1;
+        }
+      }
+
+      if (row[2]) {
+        const val2 = String(row[2]).trim();
+        if (isPhone(val2)) {
+          rawMob = val2;
+        }
+      }
+
+      if (row[4]) {
+        const val4 = Number(row[4]) || 0;
+        if (val4 < 10000) rawBal = val4;
+      }
+
       return {
         id: `po-${rowIndex + 1}`,
         name,
         postmasterName: isInvalidPostOfficeName(rawPm) ? 'Postmaster' : rawPm,
-        mobileNumber: rawMob.toLowerCase().includes('mobile') ? '03001234567' : rawMob,
+        mobileNumber: String(rawMob || '').toLowerCase().includes('mobile') ? '03001234567' : rawMob,
         status: String(row[3] || '').toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
-        initialBalance: Number(row[4]) || 0,
+        initialBalance: rawBal,
       };
     }
   }
@@ -715,13 +802,25 @@ export const officeToRow = (po: PostOffice, index: number): (string | number)[] 
 
 export const rowToOffice = (row: any[]): PostOffice | null => {
   if (!row || row.length < 3 || !row[2]) return null;
+  const name = String(row[2]).trim();
+  if (isInvalidPostOfficeName(name)) return null;
+
+  let pm = row[3] ? String(row[3]).trim() : 'Postmaster';
+  let mob = row[4] ? String(row[4]).trim() : '03001234567';
+  let bal = Number(row[6]) || 0;
+
+  if (bal >= 10000) {
+    if (!mob || mob === '03001234567') mob = '0' + String(bal);
+    bal = 0;
+  }
+
   return {
     id: row[1] ? String(row[1]) : `po-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-    name: String(row[2]).trim(),
-    postmasterName: row[3] ? String(row[3]).trim() : 'Postmaster',
-    mobileNumber: row[4] ? String(row[4]).trim() : '03001234567',
+    name,
+    postmasterName: isInvalidPostOfficeName(pm) ? 'Postmaster' : pm,
+    mobileNumber: String(mob || '').toLowerCase().includes('mobile') ? '03001234567' : mob,
     status: String(row[5]).toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
-    initialBalance: Number(row[6]) || 0,
+    initialBalance: bal >= 0 && bal < 10000 ? bal : 0,
   };
 };
 
