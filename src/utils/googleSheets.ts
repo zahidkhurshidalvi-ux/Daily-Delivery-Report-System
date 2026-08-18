@@ -66,18 +66,14 @@ export const setGoogleAccessToken = (token: string, expiresInSeconds = 3500) => 
 };
 
 export const getGoogleAccessToken = (): string | null => {
-  if (inMemoryToken && tokenExpiryTimestamp && Date.now() < tokenExpiryTimestamp) {
+  if (inMemoryToken) {
     return inMemoryToken;
   }
   try {
     const storedToken =
       localStorage.getItem('pak_post_google_token') || sessionStorage.getItem('pak_post_google_token');
-    const storedExp =
-      localStorage.getItem('pak_post_google_token_exp') ||
-      sessionStorage.getItem('pak_post_google_token_exp');
-    if (storedToken && storedExp && Date.now() < parseInt(storedExp, 10)) {
+    if (storedToken) {
       inMemoryToken = storedToken;
-      tokenExpiryTimestamp = parseInt(storedExp, 10);
       return storedToken;
     }
   } catch (e) {
@@ -186,7 +182,7 @@ export const requestGoogleOAuthToken = async (
             },
           });
 
-          client.requestAccessToken({ prompt: 'consent' });
+          client.requestAccessToken({ prompt: '' });
         } catch (initErr) {
           reject(initErr);
         }
