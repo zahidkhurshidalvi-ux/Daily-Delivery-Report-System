@@ -1,23 +1,21 @@
 import React from 'react';
 import { UserRole } from '../types';
 import {
-  LayoutDashboard,
   FileSpreadsheet,
+  LayoutDashboard,
   Clock,
   FileDown,
   Building,
   Users,
   MessageSquare,
   ScrollText,
-  Lock,
 } from 'lucide-react';
 
 export type NavTab =
-  | 'dashboard'
   | 'daily-reports'
+  | 'dashboard'
   | 'admin-reports'
   | 'pending-reports'
-  | 'google-sheets'
   | 'pdf-exports'
   | 'post-offices'
   | 'users'
@@ -37,11 +35,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   userRole,
   pendingCount,
-  onOpenAdminLogin,
 }) => {
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard, role: 'ADMIN' },
     { id: 'daily-reports', label: 'Submit Daily Report', icon: FileSpreadsheet, role: 'ALL' },
+    { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard, role: 'ADMIN' },
     { id: 'admin-reports', label: 'Summary & Reports (Admin)', icon: FileSpreadsheet, role: 'ADMIN' },
     {
       id: 'pending-reports',
@@ -50,7 +47,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       role: 'ADMIN',
       badge: pendingCount > 0 ? pendingCount : null,
     },
-    { id: 'google-sheets', label: 'Google Sheets Sync', icon: FileSpreadsheet, role: 'ADMIN' },
     { id: 'pdf-exports', label: 'PDF & Excel Reports', icon: FileDown, role: 'ADMIN' },
     { id: 'post-offices', label: 'Post Offices Master', icon: Building, role: 'ADMIN' },
     { id: 'users', label: 'User Accounts', icon: Users, role: 'ADMIN' },
@@ -85,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id as NavTab)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded text-xs font-medium transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded text-xs font-medium transition-colors cursor-pointer ${
                   isActive
                     ? 'bg-[#005522] text-white font-bold shadow-xs'
                     : 'text-green-100/90 hover:bg-[#005522]/80 hover:text-white'
@@ -112,4 +108,3 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
-

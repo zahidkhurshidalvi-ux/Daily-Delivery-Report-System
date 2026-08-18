@@ -1,6 +1,6 @@
 import React from 'react';
-import { User, GoogleSheetsConfig } from '../types';
-import { LogOut, ShieldCheck, Building2, Calendar, Bell, Lock, RefreshCw, Database, ExternalLink } from 'lucide-react';
+import { User } from '../types';
+import { LogOut, ShieldCheck, Calendar, Bell, Lock, RefreshCw } from 'lucide-react';
 import { formatDatePK, getTodayDateString } from '../utils/calculations';
 
 interface HeaderProps {
@@ -13,8 +13,6 @@ interface HeaderProps {
   onToggleAutoRefresh: () => void;
   onManualRefresh: () => void;
   lastRefreshedAt?: Date | null;
-  googleSheetsConfig?: GoogleSheetsConfig;
-  onNavigateGoogleSheets?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -27,12 +25,9 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleAutoRefresh,
   onManualRefresh,
   lastRefreshedAt,
-  googleSheetsConfig,
-  onNavigateGoogleSheets,
 }) => {
   const todayStr = getTodayDateString();
   const isAdmin = currentUser?.role === 'ADMIN';
-  const isSheetsConnected = !!(googleSheetsConfig?.spreadsheetId || googleSheetsConfig?.webhookUrl);
 
   return (
     <header className="bg-white text-gray-800 shadow-xs border-b border-gray-200 sticky top-0 z-30 no-print">
@@ -45,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-base font-extrabold tracking-tight text-[#00401A] uppercase leading-tight">
+                <h1 className="text-base sm:text-lg font-black text-gray-900 leading-none">
                   PAKISTAN POST
                 </h1>
                 <span className="bg-[#00401A]/10 text-[#00401A] text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#00401A]/20">
@@ -63,31 +58,11 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Cloud Database Connected Pill */}
             <div
               className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-[#006633] border border-emerald-200"
-              title="Firebase Cloud Database is live and permanently syncing all devices in real-time."
+              title="Firebase Cloud Database is live and syncing all devices in real-time."
             >
               <span className="w-2 h-2 rounded-full bg-[#006633] animate-pulse"></span>
-              <span>Cloud DB: Connected</span>
+              <span>Cloud DB: Live</span>
             </div>
-
-            {/* Google Sheets Database Status Pill */}
-            {onNavigateGoogleSheets && (
-              <button
-                onClick={onNavigateGoogleSheets}
-                className={`hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border ${
-                  isSheetsConnected
-                    ? 'bg-green-50 hover:bg-green-100 text-[#006633] border-green-200'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
-                }`}
-                title={
-                  isSheetsConnected
-                    ? `Google Sheets Backup is Linked (${googleSheetsConfig?.syncMethod || 'ACTIVE'}). Click to open database manager.`
-                    : 'Click to link optional Google Sheets Backup'
-                }
-              >
-                <Database className="w-3.5 h-3.5" />
-                <span>{isSheetsConnected ? 'Sheets Backup: On' : 'Sheets Backup'}</span>
-              </button>
-            )}
 
             {/* Auto-Refresh Toggle Control */}
             <div className="flex items-center space-x-1.5 bg-gray-50 p-1 rounded-lg border border-gray-200">

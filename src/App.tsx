@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, DailyReport, PostOffice, WhatsAppConfig, TriggerConfig, GoogleSheetsConfig, SystemLog } from './types';
+import { User, DailyReport, PostOffice, WhatsAppConfig, TriggerConfig, SystemLog } from './types';
 import {
   INITIAL_POST_OFFICES,
   INITIAL_USERS,
   INITIAL_REPORTS,
   INITIAL_WHATSAPP_CONFIG,
   INITIAL_TRIGGER_CONFIG,
-  INITIAL_GOOGLE_SHEETS_CONFIG,
 } from './data/initialData';
 import {
   cleanAndFilterPostOffices,
@@ -14,15 +13,6 @@ import {
   getTodayDateString,
   isInvalidPostOfficeName,
 } from './utils/calculations';
-import {
-  dispatchReportSync,
-  dispatchReportDelete,
-  dispatchReportBulkSync,
-  dispatchOfficesSync,
-  fetchFullDatabaseFromGoogleSheet,
-  fetchDatabaseViaWebhook,
-  getGoogleAccessToken,
-} from './utils/googleSheets';
 import {
   subscribeToPostOffices,
   subscribeToDailyReports,
@@ -43,7 +33,6 @@ import { PostOfficesManager } from './components/PostOfficesManager';
 import { PendingReports } from './components/PendingReports';
 import { PdfExportView } from './components/PdfExportView';
 import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
-import { GoogleSheetsManager } from './components/GoogleSheetsManager';
 import { UserManagement } from './components/UserManagement';
 import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
@@ -123,11 +112,6 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_TRIGGER_CONFIG;
   });
 
-  const [googleSheetsConfig, setGoogleSheetsConfig] = useState<GoogleSheetsConfig>(() => {
-    const saved = localStorage.getItem('pakpost_sheets_config');
-    return saved ? JSON.parse(saved) : INITIAL_GOOGLE_SHEETS_CONFIG;
-  });
-
   const [logs, setLogs] = useState<SystemLog[]>([
     {
       id: 'log-1',
@@ -140,9 +124,8 @@ export default function App() {
     },
   ]);
 
-  const [activeTab, setActiveTab] = useState<NavTab>(() => {
-    return currentUser?.role === 'ADMIN' ? 'dashboard' : 'daily-reports';
-  });
+  // Main page default tab is ALWAYS 'daily-reports' (User Daily Submission Form) for easy user entry
+  const [activeTab, setActiveTab] = useState<NavTab>('daily-reports');
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [editingReport, setEditingReport] = useState<DailyReport | null>(null);
 
@@ -165,37 +148,6 @@ export default function App() {
       type,
     };
     setLogs((prev) => [newLog, ...prev]);
-  };
-
-  // Full Database State Replacement Handler (from Google Sheets Pull or Admin Import)
-  const handleUpdateAllDatabase = (data: {
-    reports?: DailyReport[];
-    postOffices?: PostOffice[];
-    users?: User[];
-    whatsAppConfig?: WhatsAppConfig;
-    triggerConfig?: TriggerConfig;
-  }) => {
-    if (data.reports) {
-      const cleaned = cleanAndFilterReports(data.reports);
-      setReports(cleaned);
-      cleaned.forEach((r) => saveDailyReportToCloud(r));
-    }
-    if (data.postOffices) {
-      // Merge with existing offices to preserve all contact numbers
-      const merged = mergeOfficesPreservingData(postOfficesRef.current, cleanAndFilterPostOffices(data.postOffices));
-      setPostOffices(merged);
-      syncAllOfficesToCloud(merged);
-    }
-    if (data.users) setUsers(data.users);
-    if (data.whatsAppConfig) {
-      setWhatsAppConfig(data.whatsAppConfig);
-      saveAppConfigToCloud({ whatsAppConfig: data.whatsAppConfig });
-    }
-    if (data.triggerConfig) {
-      setTriggerConfig(data.triggerConfig);
-      saveAppConfigToCloud({ triggerConfig: data.triggerConfig });
-    }
-    logAction('DATABASE_UPDATED', 'Updated application state across all devices', 'SUCCESS');
   };
 
   // 1. Permanent Real-time Cloud Subscriptions across all Mobile & Desktop devices
@@ -230,7 +182,6 @@ export default function App() {
     const unsubConfig = subscribeToAppConfig((cfg) => {
       if (cfg.whatsAppConfig) setWhatsAppConfig(cfg.whatsAppConfig);
       if (cfg.triggerConfig) setTriggerConfig(cfg.triggerConfig);
-      if (cfg.googleSheetsConfig) setGoogleSheetsConfig(cfg.googleSheetsConfig);
     });
 
     return () => {
@@ -240,105 +191,8 @@ export default function App() {
     };
   }, []);
 
-  // 2. Startup Auto-Pull from Google Sheets Database if configured
-  useEffect(() => {
-    const autoLoadFromGoogleSheets = async () => {
-      if (googleSheetsConfig.webhookUrl) {
-        try {
-          const res = await fetchDatabaseViaWebhook(googleSheetsConfig.webhookUrl);
-          if (res.postOffices && res.postOffices.length > 0) {
-            const merged = mergeOfficesPreservingData(postOfficesRef.current, cleanAndFilterPostOffices(res.postOffices));
-            setPostOffices(merged);
-            syncAllOfficesToCloud(merged);
-          }
-          if (res.reports && res.reports.length > 0) {
-            const cleaned = cleanAndFilterReports(res.reports);
-            setReports(cleaned);
-            cleaned.forEach((r) => saveDailyReportToCloud(r));
-          }
-          if (res.users && res.users.length > 0) {
-            setUsers(res.users);
-          }
-          logAction('SHEETS_AUTO_LOAD', 'Loaded database from Google Sheet Webhook on startup', 'SUCCESS');
-        } catch (e) {
-          // Graceful fallback
-        }
-      } else if (googleSheetsConfig.spreadsheetId) {
-        const token = getGoogleAccessToken();
-        if (token) {
-          try {
-            const res = await fetchFullDatabaseFromGoogleSheet(googleSheetsConfig.spreadsheetId, token);
-            if (res.postOffices && res.postOffices.length > 0) {
-              const merged = mergeOfficesPreservingData(postOfficesRef.current, cleanAndFilterPostOffices(res.postOffices));
-              setPostOffices(merged);
-              syncAllOfficesToCloud(merged);
-            }
-            if (res.reports && res.reports.length > 0) {
-              const cleaned = cleanAndFilterReports(res.reports);
-              setReports(cleaned);
-              cleaned.forEach((r) => saveDailyReportToCloud(r));
-            }
-            if (res.users && res.users.length > 0) {
-              setUsers(res.users);
-            }
-            logAction('SHEETS_AUTO_LOAD', 'Loaded database from Google Sheet OAuth on startup', 'SUCCESS');
-          } catch (e) {
-            // Graceful fallback
-          }
-        }
-      }
-    };
-
-    autoLoadFromGoogleSheets();
-  }, []);
-
   const handleRefreshData = async () => {
     setLastRefreshedAt(new Date());
-
-    if (googleSheetsConfig.webhookUrl) {
-      try {
-        const res = await fetchDatabaseViaWebhook(googleSheetsConfig.webhookUrl);
-        if (res.postOffices && res.postOffices.length > 0) {
-          const merged = mergeOfficesPreservingData(postOfficesRef.current, cleanAndFilterPostOffices(res.postOffices));
-          setPostOffices(merged);
-          syncAllOfficesToCloud(merged);
-        }
-        if (res.reports && res.reports.length > 0) {
-          const cleaned = cleanAndFilterReports(res.reports);
-          setReports(cleaned);
-          cleaned.forEach((r) => saveDailyReportToCloud(r));
-        }
-        if (res.users && res.users.length > 0) {
-          setUsers(res.users);
-        }
-        setLastRefreshedAt(new Date());
-      } catch (e) {
-        // Silent catch for polling
-      }
-    } else if (googleSheetsConfig.spreadsheetId) {
-      const token = getGoogleAccessToken();
-      if (token) {
-        try {
-          const res = await fetchFullDatabaseFromGoogleSheet(googleSheetsConfig.spreadsheetId, token);
-          if (res.postOffices && res.postOffices.length > 0) {
-            const merged = mergeOfficesPreservingData(postOfficesRef.current, cleanAndFilterPostOffices(res.postOffices));
-            setPostOffices(merged);
-            syncAllOfficesToCloud(merged);
-          }
-          if (res.reports && res.reports.length > 0) {
-            const cleaned = cleanAndFilterReports(res.reports);
-            setReports(cleaned);
-            cleaned.forEach((r) => saveDailyReportToCloud(r));
-          }
-          if (res.users && res.users.length > 0) {
-            setUsers(res.users);
-          }
-          setLastRefreshedAt(new Date());
-        } catch (e) {
-          // Silent catch for polling
-        }
-      }
-    }
   };
 
   useEffect(() => {
@@ -352,12 +206,6 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, [autoRefreshEnabled]);
 
-  useEffect(() => {
-    if (currentUser?.role !== 'ADMIN' && activeTab === 'dashboard') {
-      setActiveTab('daily-reports');
-    }
-  }, [currentUser]);
-
   // Sync LocalStorage for offline durability
   useEffect(() => {
     localStorage.setItem('pakpost_offices', JSON.stringify(postOffices));
@@ -366,10 +214,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pakpost_reports', JSON.stringify(reports));
   }, [reports]);
-
-  useEffect(() => {
-    localStorage.setItem('pakpost_sheets_config', JSON.stringify(googleSheetsConfig));
-  }, [googleSheetsConfig]);
 
   useEffect(() => {
     localStorage.setItem('pakpost_users', JSON.stringify(users));
@@ -395,9 +239,6 @@ export default function App() {
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     setShowAdminLoginModal(false);
-    if (user.role === 'ADMIN') {
-      setActiveTab('dashboard');
-    }
     logAction('USER_LOGIN', `Logged in as ${user.username} (${user.role})`, 'SUCCESS');
   };
 
@@ -406,6 +247,7 @@ export default function App() {
       logAction('USER_LOGOUT', `Logged out user ${currentUser.username}`);
     }
     setCurrentUser(null);
+    setActiveTab('daily-reports');
   };
 
   // Submit/Edit Daily Report Handler
@@ -429,23 +271,6 @@ export default function App() {
         `Updated report for ${reportData.officeName} on ${reportData.date}. Closing Bal: ${reportData.closingBalance}`
       );
       setEditingReport(null);
-
-      // Instantly sync edited report to connected Google Sheet
-      if (googleSheetsConfig.autoSyncEnabled) {
-        dispatchReportBulkSync(googleSheetsConfig, updatedReports)
-          .then((res) => {
-            if (res.synced) {
-              logAction(
-                'GOOGLE_SHEETS_UPDATE_SYNC',
-                `Instantly updated Google Sheet with edited record for ${reportData.officeName}`,
-                'SUCCESS'
-              );
-            }
-          })
-          .catch((err) => {
-            console.warn('Google Sheets update sync error:', err);
-          });
-      }
     } else {
       const newReportRecord: DailyReport = {
         ...reportData,
@@ -458,23 +283,6 @@ export default function App() {
         'REPORT_SUBMIT',
         `Submitted daily report for ${reportData.officeName} on ${reportData.date}. Closing Bal: ${reportData.closingBalance}`
       );
-
-      // Auto-Sync to Google Sheets if enabled
-      if (googleSheetsConfig.autoSyncEnabled) {
-        dispatchReportSync(googleSheetsConfig, newReportRecord)
-          .then((res) => {
-            if (res.synced) {
-              logAction(
-                'GOOGLE_SHEETS_AUTOSYNC',
-                `Auto-synced report for ${reportData.officeName} to Google Sheet (${res.method.toUpperCase()})`,
-                'SUCCESS'
-              );
-            }
-          })
-          .catch((err) => {
-            console.warn('Google Sheets auto-sync error:', err);
-          });
-      }
     }
   };
 
@@ -485,23 +293,6 @@ export default function App() {
       setReports(remainingReports);
       deleteDailyReportFromCloud(reportId);
       logAction('REPORT_DELETE', `Deleted report ${reportId} for ${target.officeName}`);
-
-      // Instantly remove record from connected Google Sheet
-      if (googleSheetsConfig.autoSyncEnabled) {
-        dispatchReportDelete(googleSheetsConfig, remainingReports, target)
-          .then((res) => {
-            if (res.synced) {
-              logAction(
-                'GOOGLE_SHEETS_DELETE_SYNC',
-                `Instantly removed deleted record (${target.officeName} - ${target.date}) from Google Sheet`,
-                'SUCCESS'
-              );
-            }
-          })
-          .catch((err) => {
-            console.warn('Google Sheets live delete sync error:', err);
-          });
-      }
     }
   };
 
@@ -532,12 +323,6 @@ export default function App() {
     const cleaned = cleanAndFilterPostOffices(updated);
     setPostOffices(cleaned);
     savePostOfficeToCloud(office);
-
-    if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
-        console.warn('Google Sheets offices sync error:', err);
-      });
-    }
   };
 
   const handleToggleOfficeStatus = (officeId: string) => {
@@ -550,12 +335,6 @@ export default function App() {
     setPostOffices(cleaned);
     savePostOfficeToCloud(updatedOffice);
     logAction('MASTER_STATUS_TOGGLE', `Toggled office status for ${target.name} to ${newStatus}`);
-
-    if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
-        console.warn('Google Sheets offices sync error:', err);
-      });
-    }
   };
 
   const handleDeleteOffice = (officeId: string) => {
@@ -565,19 +344,12 @@ export default function App() {
     setPostOffices(cleaned);
     deletePostOfficeFromCloud(officeId);
     logAction('MASTER_OFFICE_DELETE', `Deleted post office: ${target?.name || officeId}`, 'WARNING');
-
-    if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
-        console.warn('Google Sheets offices sync error:', err);
-      });
-    }
   };
 
   const handleBulkImportOffices = (imported: PostOffice[], replaceExisting: boolean) => {
     const validImported = cleanAndFilterPostOffices(imported);
     let combined: PostOffice[];
     if (replaceExisting) {
-      // Even when replacing, preserve contact numbers for matching offices
       combined = mergeOfficesPreservingData(postOffices, validImported);
     } else {
       combined = mergeOfficesPreservingData(postOffices, validImported);
@@ -589,36 +361,18 @@ export default function App() {
       'MASTER_OFFICE_BULK_IMPORT',
       `Imported ${validImported.length} offices (${replaceExisting ? 'Updated existing' : 'Appended'}) with preserved contact details.`
     );
-
-    if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
-        console.warn('Google Sheets offices bulk sync error:', err);
-      });
-    }
   };
 
   const handleClearAllOffices = () => {
     postOffices.forEach((po) => deletePostOfficeFromCloud(po.id));
     setPostOffices([]);
     logAction('MASTER_OFFICE_CLEAR_ALL', 'Cleared all post offices from master directory', 'WARNING');
-
-    if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, []).catch((err) => {
-        console.warn('Google Sheets offices sync error:', err);
-      });
-    }
   };
 
   const handleResetDefaultOffices = () => {
     setPostOffices([...INITIAL_POST_OFFICES]);
     syncAllOfficesToCloud(INITIAL_POST_OFFICES);
     logAction('MASTER_OFFICE_RESET', 'Reset post offices to defaults');
-
-    if (googleSheetsConfig.autoSyncEnabled) {
-      dispatchOfficesSync(googleSheetsConfig, INITIAL_POST_OFFICES).catch((err) => {
-        console.warn('Google Sheets offices sync error:', err);
-      });
-    }
   };
 
   // Password Update
@@ -660,12 +414,6 @@ export default function App() {
         'TRIGGER_ROLLOVER_RUN',
         'Executed 12:05 AM Trigger: Carried forward closing balances for all post offices.'
       );
-
-      if (googleSheetsConfig.autoSyncEnabled) {
-        dispatchOfficesSync(googleSheetsConfig, cleaned).catch((err) => {
-          console.warn('Google Sheets offices rollover sync error:', err);
-        });
-      }
     }
   };
 
@@ -697,8 +445,6 @@ export default function App() {
         onToggleAutoRefresh={() => setAutoRefreshEnabled((prev) => !prev)}
         onManualRefresh={handleRefreshData}
         lastRefreshedAt={lastRefreshedAt}
-        googleSheetsConfig={googleSheetsConfig}
-        onNavigateGoogleSheets={() => setActiveTab('google-sheets')}
       />
 
       {/* Main Body */}
@@ -714,19 +460,6 @@ export default function App() {
 
         {/* Content Area */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl">
-          {activeTab === 'dashboard' && (
-            <Dashboard
-              reports={reports}
-              postOffices={postOffices}
-              selectedDate={selectedDate}
-              setSelectedDate={setSelectedDate}
-              onNavigateReports={() => setActiveTab('admin-reports')}
-              onNavigateOffices={() => setActiveTab('post-offices')}
-              onNavigateSubmit={() => setActiveTab('daily-reports')}
-              userRole={currentUser ? currentUser.role : 'PUBLIC'}
-            />
-          )}
-
           {activeTab === 'daily-reports' && (
             <DailyReportForm
               postOffices={postOffices}
@@ -734,10 +467,20 @@ export default function App() {
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
               onSubmitReport={handleSubmitDailyReport}
-              onLogAction={logAction}
               editingReport={editingReport}
               onCancelEdit={() => setEditingReport(null)}
               currentUser={currentUser}
+            />
+          )}
+
+          {activeTab === 'dashboard' && (
+            <Dashboard
+              reports={reports}
+              postOffices={postOffices}
+              selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
+              onNavigateNewReport={() => setActiveTab('daily-reports')}
+              onNavigatePending={() => setActiveTab('pending-reports')}
             />
           )}
 
@@ -784,22 +527,6 @@ export default function App() {
               postOffices={postOffices}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
-            />
-          )}
-
-          {activeTab === 'google-sheets' && (
-            <GoogleSheetsManager
-              config={googleSheetsConfig}
-              onUpdateConfig={(newCfg) => {
-                setGoogleSheetsConfig(newCfg);
-                saveAppConfigToCloud({ googleSheetsConfig: newCfg });
-              }}
-              reports={reports}
-              postOffices={postOffices}
-              users={users}
-              whatsAppConfig={whatsAppConfig}
-              triggerConfig={triggerConfig}
-              onImportDatabase={handleUpdateAllDatabase}
             />
           )}
 
