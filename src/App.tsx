@@ -496,6 +496,7 @@ export default function App() {
               postOffices={postOffices}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
+              currentUser={currentUser}
               onDeleteReport={handleDeleteReport}
               onEditReport={(rep) => {
                 setEditingReport(rep);
