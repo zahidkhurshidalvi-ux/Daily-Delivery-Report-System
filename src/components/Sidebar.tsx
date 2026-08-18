@@ -1,8 +1,8 @@
 import React from 'react';
 import { UserRole } from '../types';
 import {
-  FileSpreadsheet,
   LayoutDashboard,
+  FileSpreadsheet,
   Clock,
   FileDown,
   Building,
@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 
 export type NavTab =
-  | 'daily-reports'
   | 'dashboard'
+  | 'daily-reports'
   | 'admin-reports'
   | 'pending-reports'
   | 'pdf-exports'
@@ -36,23 +36,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userRole,
   pendingCount,
 }) => {
-  const navItems = [
-    { id: 'daily-reports', label: 'Submit Daily Report', icon: FileSpreadsheet, role: 'ALL' },
-    { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard, role: 'ADMIN' },
-    { id: 'admin-reports', label: 'Summary & Reports (Admin)', icon: FileSpreadsheet, role: 'ADMIN' },
-    {
-      id: 'pending-reports',
-      label: 'Pending Offices',
-      icon: Clock,
-      role: 'ADMIN',
-      badge: pendingCount > 0 ? pendingCount : null,
-    },
-    { id: 'pdf-exports', label: 'PDF & Excel Reports', icon: FileDown, role: 'ADMIN' },
-    { id: 'post-offices', label: 'Post Offices Master', icon: Building, role: 'ADMIN' },
-    { id: 'users', label: 'User Accounts', icon: Users, role: 'ADMIN' },
-    { id: 'whatsapp-triggers', label: 'WhatsApp & Triggers', icon: MessageSquare, role: 'ADMIN' },
-    { id: 'logs', label: 'System Audit Logs', icon: ScrollText, role: 'ADMIN' },
-  ];
+  // When Admin is logged in: Dashboard is at the very TOP
+  // When Public/Office user: Submit Daily Report is at the top
+  const navItems =
+    userRole === 'ADMIN'
+      ? [
+          { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard, role: 'ADMIN' },
+          { id: 'daily-reports', label: 'Submit Daily Report', icon: FileSpreadsheet, role: 'ALL' },
+          { id: 'admin-reports', label: 'Summary & Reports (Admin)', icon: FileSpreadsheet, role: 'ADMIN' },
+          {
+            id: 'pending-reports',
+            label: 'Pending Offices',
+            icon: Clock,
+            role: 'ADMIN',
+            badge: pendingCount > 0 ? pendingCount : null,
+          },
+          { id: 'pdf-exports', label: 'PDF & Excel Reports', icon: FileDown, role: 'ADMIN' },
+          { id: 'post-offices', label: 'Post Offices Master', icon: Building, role: 'ADMIN' },
+          { id: 'users', label: 'User Accounts', icon: Users, role: 'ADMIN' },
+          { id: 'whatsapp-triggers', label: 'WhatsApp & Triggers', icon: MessageSquare, role: 'ADMIN' },
+          { id: 'logs', label: 'System Audit Logs', icon: ScrollText, role: 'ADMIN' },
+        ]
+      : [
+          { id: 'daily-reports', label: 'Submit Daily Report', icon: FileSpreadsheet, role: 'ALL' },
+        ];
 
   const filteredItems = navItems.filter((item) => item.role === 'ALL' || userRole === 'ADMIN');
 

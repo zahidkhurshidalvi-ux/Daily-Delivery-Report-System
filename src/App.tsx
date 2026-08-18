@@ -124,8 +124,11 @@ export default function App() {
     },
   ]);
 
-  // Main page default tab is ALWAYS 'daily-reports' (User Daily Submission Form) for easy user entry
-  const [activeTab, setActiveTab] = useState<NavTab>('daily-reports');
+  // If Admin is logged in, show Dashboard by default so updated metrics are immediately visible
+  // If Public user, show Submit Daily Report by default for quick data filling
+  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    return currentUser?.role === 'ADMIN' ? 'dashboard' : 'daily-reports';
+  });
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [editingReport, setEditingReport] = useState<DailyReport | null>(null);
 
@@ -239,6 +242,9 @@ export default function App() {
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     setShowAdminLoginModal(false);
+    if (user.role === 'ADMIN') {
+      setActiveTab('dashboard');
+    }
     logAction('USER_LOGIN', `Logged in as ${user.username} (${user.role})`, 'SUCCESS');
   };
 
@@ -460,6 +466,17 @@ export default function App() {
 
         {/* Content Area */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl">
+          {activeTab === 'dashboard' && (
+            <Dashboard
+              reports={reports}
+              postOffices={postOffices}
+              selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
+              onNavigateNewReport={() => setActiveTab('daily-reports')}
+              onNavigatePending={() => setActiveTab('pending-reports')}
+            />
+          )}
+
           {activeTab === 'daily-reports' && (
             <DailyReportForm
               postOffices={postOffices}
@@ -470,17 +487,6 @@ export default function App() {
               editingReport={editingReport}
               onCancelEdit={() => setEditingReport(null)}
               currentUser={currentUser}
-            />
-          )}
-
-          {activeTab === 'dashboard' && (
-            <Dashboard
-              reports={reports}
-              postOffices={postOffices}
-              selectedDate={selectedDate}
-              setSelectedDate={setSelectedDate}
-              onNavigateNewReport={() => setActiveTab('daily-reports')}
-              onNavigatePending={() => setActiveTab('pending-reports')}
             />
           )}
 
