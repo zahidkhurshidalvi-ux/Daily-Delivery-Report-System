@@ -278,15 +278,27 @@ export default function App() {
     reportData: Omit<DailyReport, 'id' | 'submittedAt'>,
     isEdit: boolean
   ) => {
-    if (isEdit && editingReport) {
+    const officeNameSafe = (reportData.officeName || 'office').replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const existingRep = reports.find(
+      (r) => (editingReport && r.id === editingReport.id) || (r.officeName === reportData.officeName && r.date === reportData.date)
+    );
+
+    if (existingRep || (isEdit && editingReport)) {
+      const targetId = existingRep?.id || editingReport?.id || `rep-${reportData.date}-${officeNameSafe}`;
       const updatedReportRecord: DailyReport = {
-        ...editingReport,
+        ...(existingRep || editingReport || {}),
         ...reportData,
+        id: targetId,
         updatedAt: new Date().toISOString(),
       };
       const updatedReports = reports.map((r) =>
-        r.id === editingReport.id ? updatedReportRecord : r
+        r.id === targetId || (r.officeName === reportData.officeName && r.date === reportData.date)
+          ? updatedReportRecord
+          : r
       );
+      if (!updatedReports.some((r) => r.id === targetId)) {
+        updatedReports.unshift(updatedReportRecord);
+      }
       setReports(updatedReports);
       await saveDailyReportToCloud(updatedReportRecord);
       logAction(
@@ -295,7 +307,6 @@ export default function App() {
       );
       setEditingReport(null);
     } else {
-      const officeNameSafe = (reportData.officeName || 'office').replace(/[^a-zA-Z0-9_.-]/g, '_');
       const newReportRecord: DailyReport = {
         ...reportData,
         id: `rep-${reportData.date}-${officeNameSafe}`,

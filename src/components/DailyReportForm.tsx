@@ -170,17 +170,19 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       return;
     }
 
-    // 2. Check Duplicate report for same date and office (if not editing)
-    const isEdit = Boolean(editingReport);
-    if (!isEdit) {
-      const existing = reports.find((r) => r.officeName === selectedOfficeName && r.date === date);
-      if (existing) {
-        setErrorMessage(
-          `A Daily Delivery Report for ${selectedOffice.name} on ${formatDatePK(date)} has already been submitted. Use Edit mode if changes are needed.`
-        );
-        return;
-      }
-    }
+    // 2. Determine if it is a new submission or update
+    const existing = reports.find((r) => r.officeName === selectedOfficeName && r.date === date);
+    const isEdit = Boolean(editingReport) || Boolean(existing);
+
+    // Calculate accurate Closing Balance
+    const calculatedClosingBal = calculateClosingBalance(
+      parsedLastBalance,
+      parsedReceivedToday,
+      parsedDelivered,
+      parsedReturned,
+      parsedMissent,
+      parsedDeposit
+    );
 
     // Create report object
     const newReport: Omit<DailyReport, 'id' | 'submittedAt'> = {
@@ -193,7 +195,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       returnedToSender: parsedReturned,
       missent: parsedMissent,
       deposit: parsedDeposit,
-      closingBalance: 0,
+      closingBalance: calculatedClosingBal,
       remarks,
       submittedBy: currentUser
         ? currentUser.username
