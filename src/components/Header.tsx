@@ -58,8 +58,17 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Right Section: Auto-Refresh, Date, Pending Badge, User & Admin Login / Logout */}
+          {/* Right Section: Cloud DB, Auto-Refresh, Date, Pending Badge, User & Admin Login / Logout */}
           <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Cloud Database Connected Pill */}
+            <div
+              className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-[#006633] border border-emerald-200"
+              title="Firebase Cloud Database is live and permanently syncing all devices in real-time."
+            >
+              <span className="w-2 h-2 rounded-full bg-[#006633] animate-pulse"></span>
+              <span>Cloud DB: Connected</span>
+            </div>
+
             {/* Google Sheets Database Status Pill */}
             {onNavigateGoogleSheets && (
               <button
@@ -67,17 +76,16 @@ export const Header: React.FC<HeaderProps> = ({
                 className={`hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border ${
                   isSheetsConnected
                     ? 'bg-green-50 hover:bg-green-100 text-[#006633] border-green-200'
-                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
                 }`}
                 title={
                   isSheetsConnected
-                    ? `Google Sheets Database is Connected (${googleSheetsConfig?.syncMethod || 'ACTIVE'}). Click to open database manager.`
-                    : 'Click to connect Google Sheets Database'
+                    ? `Google Sheets Backup is Linked (${googleSheetsConfig?.syncMethod || 'ACTIVE'}). Click to open database manager.`
+                    : 'Click to link optional Google Sheets Backup'
                 }
               >
                 <Database className="w-3.5 h-3.5" />
-                <span>{isSheetsConnected ? 'Google Sheet DB: Live' : 'Connect Sheet DB'}</span>
-                {isSheetsConnected && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
+                <span>{isSheetsConnected ? 'Sheets Backup: On' : 'Sheets Backup'}</span>
               </button>
             )}
 

@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "PostOffice": {
+      "title": "PostOffice",
+      "description": "Represents an operational post office within the postal division",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "postmasterName": { "type": "string", "maxLength": 150 },
+        "mobileNumber": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "initialBalance": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "status"]
+    },
+    "DailyReport": {
+      "title": "DailyReport",
+      "description": "Represents a single daily delivery record submitted by a post office",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 20 },
+        "postOfficeName": { "type": "string", "maxLength": 150 },
+        "lastBalance": { "type": "number" },
+        "received": { "type": "number" },
+        "totalArticles": { "type": "number" },
+        "delivered": { "type": "number" },
+        "returned": { "type": "number" },
+        "deposit": { "type": "number" },
+        "totalDisposed": { "type": "number" },
+        "closingBalance": { "type": "number" },
+        "deliveryPercentage": { "type": "number" },
+        "submittedAt": { "type": "string", "maxLength": 50 },
+        "submittedBy": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "date", "postOfficeName"]
+    },
+    "AppConfig": {
+      "title": "AppConfig",
+      "description": "Global application configuration for WhatsApp and Triggers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "whatsAppConfig": { "type": "object" },
+        "triggerConfig": { "type": "object" },
+        "googleSheetsConfig": { "type": "object" },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/postOffices/{officeId}": {
+      "schema": "PostOffice",
+      "description": "Collection of all post offices in the division"
+    },
+    "/dailyReports/{reportId}": {
+      "schema": "DailyReport",
+      "description": "Collection of all daily delivery reports submitted across all post offices"
+    },
+    "/appConfig/{configId}": {
+      "schema": "AppConfig",
+      "description": "Global application settings and automation triggers"
+    }
+  }
+}

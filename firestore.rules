@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    function isValidPostOffice(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             data.status in ['ACTIVE', 'INACTIVE'];
+    }
+
+    function isValidDailyReport(data) {
+      return data.date is string && data.date.size() > 0 && data.date.size() <= 20 &&
+             data.postOfficeName is string && data.postOfficeName.size() > 0 && data.postOfficeName.size() <= 150;
+    }
+
+    // Post Offices Collection
+    match /postOffices/{officeId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(officeId) && (request.resource == null || isValidPostOffice(request.resource.data));
+    }
+
+    // Daily Reports Collection
+    match /dailyReports/{reportId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(reportId) && (request.resource == null || isValidDailyReport(request.resource.data));
+    }
+
+    // App Configuration Document
+    match /appConfig/{configId} {
+      allow read: if true;
+      allow write: if isValidId(configId);
+    }
+  }
+}
