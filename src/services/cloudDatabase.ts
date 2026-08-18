@@ -5,6 +5,7 @@ import {
   deleteDoc,
   onSnapshot,
   writeBatch,
+  getDocs,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { PostOffice, DailyReport, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig } from '../types';
@@ -57,6 +58,42 @@ export function subscribeToPostOffices(
       handleFirestoreError(error, OperationType.LIST, POST_OFFICES_COL);
     }
   );
+}
+
+/**
+ * Fetch all daily reports once directly from Firestore server
+ */
+export async function fetchAllDailyReportsFromCloud(): Promise<DailyReport[]> {
+  try {
+    const colRef = collection(db, DAILY_REPORTS_COL);
+    const snapshot = await getDocs(colRef);
+    const reports: DailyReport[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && data.date && (data.officeName || data.postOfficeName)) {
+        reports.push({
+          id: docSnap.id,
+          date: data.date,
+          officeName: data.officeName || data.postOfficeName,
+          postmasterName: data.postmasterName || 'Postmaster',
+          lastBalance: Number(data.lastBalance) || 0,
+          receivedToday: Number(data.receivedToday ?? data.received) || 0,
+          delivered: Number(data.delivered) || 0,
+          returnedToSender: Number(data.returnedToSender ?? data.returned) || 0,
+          missent: Number(data.missent) || 0,
+          deposit: Number(data.deposit) || 0,
+          closingBalance: Number(data.closingBalance) || 0,
+          remarks: data.remarks || '',
+          submittedAt: data.submittedAt || new Date().toISOString(),
+          submittedBy: data.submittedBy || 'Postmaster',
+        });
+      }
+    });
+    return cleanAndFilterReports(reports);
+  } catch (error) {
+    console.error('Error fetching reports from Firestore server:', error);
+    return [];
+  }
 }
 
 /**
@@ -172,6 +209,7 @@ export async function syncAllOfficesToCloud(offices: PostOffice[]): Promise<void
 
 /**
  * Save / Submit a Daily Report to Cloud Firestore
+ * Guaranteed to save with both officeName and postOfficeName, receivedToday and received
  */
 export async function saveDailyReportToCloud(report: DailyReport): Promise<void> {
   const officeNameSafe = (report.officeName || 'office').replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -183,6 +221,12 @@ export async function saveDailyReportToCloud(report: DailyReport): Promise<void>
       {
         ...report,
         id: docId,
+        officeName: report.officeName,
+        postOfficeName: report.officeName, // Backwards and forwards compatibility
+        received: report.receivedToday,
+        receivedToday: report.receivedToday,
+        returned: report.returnedToSender,
+        returnedToSender: report.returnedToSender,
         submittedAt: report.submittedAt || new Date().toISOString(),
       },
       { merge: true }

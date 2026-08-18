@@ -16,6 +16,7 @@ import {
 import {
   subscribeToPostOffices,
   subscribeToDailyReports,
+  fetchAllDailyReportsFromCloud,
   savePostOfficeToCloud,
   deletePostOfficeFromCloud,
   syncAllOfficesToCloud,
@@ -124,7 +125,7 @@ export default function App() {
     },
   ]);
 
-  // If Admin is logged in, show Dashboard by default so updated metrics are immediately visible
+  // If Admin is logged in, show Dashboard by default
   // If Public user, show Submit Daily Report by default for quick data filling
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
     return currentUser?.role === 'ADMIN' ? 'dashboard' : 'daily-reports';
@@ -155,6 +156,14 @@ export default function App() {
 
   // 1. Permanent Real-time Cloud Subscriptions across all Mobile & Desktop devices
   useEffect(() => {
+    // Immediate direct pull from Cloud Firestore on mount
+    fetchAllDailyReportsFromCloud().then((cloudReps) => {
+      if (cloudReps && cloudReps.length > 0) {
+        setReports(cloudReps);
+        setLastRefreshedAt(new Date());
+      }
+    });
+
     const unsubOffices = subscribeToPostOffices(
       (cloudOffices) => {
         if (cloudOffices && cloudOffices.length > 0) {
@@ -195,6 +204,14 @@ export default function App() {
   }, []);
 
   const handleRefreshData = async () => {
+    try {
+      const freshReports = await fetchAllDailyReportsFromCloud();
+      if (freshReports && freshReports.length > 0) {
+        setReports(freshReports);
+      }
+    } catch (e) {
+      console.warn('Manual fetch error:', e);
+    }
     setLastRefreshedAt(new Date());
   };
 
@@ -257,7 +274,7 @@ export default function App() {
   };
 
   // Submit/Edit Daily Report Handler
-  const handleSubmitDailyReport = (
+  const handleSubmitDailyReport = async (
     reportData: Omit<DailyReport, 'id' | 'submittedAt'>,
     isEdit: boolean
   ) => {
@@ -271,20 +288,24 @@ export default function App() {
         r.id === editingReport.id ? updatedReportRecord : r
       );
       setReports(updatedReports);
-      saveDailyReportToCloud(updatedReportRecord);
+      await saveDailyReportToCloud(updatedReportRecord);
       logAction(
         'REPORT_UPDATE',
         `Updated report for ${reportData.officeName} on ${reportData.date}. Closing Bal: ${reportData.closingBalance}`
       );
       setEditingReport(null);
     } else {
+      const officeNameSafe = (reportData.officeName || 'office').replace(/[^a-zA-Z0-9_.-]/g, '_');
       const newReportRecord: DailyReport = {
         ...reportData,
-        id: `rep-${Date.now()}`,
+        id: `rep-${reportData.date}-${officeNameSafe}`,
         submittedAt: new Date().toISOString(),
       };
-      setReports((prev) => [newReportRecord, ...prev]);
-      saveDailyReportToCloud(newReportRecord);
+      setReports((prev) => {
+        const filtered = prev.filter((r) => r.id !== newReportRecord.id && !(r.officeName === newReportRecord.officeName && r.date === newReportRecord.date));
+        return [newReportRecord, ...filtered];
+      });
+      await saveDailyReportToCloud(newReportRecord);
       logAction(
         'REPORT_SUBMIT',
         `Submitted daily report for ${reportData.officeName} on ${reportData.date}. Closing Bal: ${reportData.closingBalance}`
@@ -292,12 +313,12 @@ export default function App() {
     }
   };
 
-  const handleDeleteReport = (reportId: string) => {
+  const handleDeleteReport = async (reportId: string) => {
     const target = reports.find((r) => r.id === reportId);
     if (target) {
       const remainingReports = reports.filter((r) => r.id !== reportId);
       setReports(remainingReports);
-      deleteDailyReportFromCloud(reportId);
+      await deleteDailyReportFromCloud(reportId);
       logAction('REPORT_DELETE', `Deleted report ${reportId} for ${target.officeName}`);
     }
   };
