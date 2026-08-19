@@ -15,6 +15,7 @@ import {
   Percent,
   Calendar,
   AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import { exportDailyReportsToExcel } from '../utils/excelExport';
 import { triggerPrintableWindow } from '../utils/pdfGenerator';
@@ -28,6 +29,7 @@ interface ReportsListProps {
   onEditReport: (report: DailyReport) => void;
   onDeleteReport: (reportId: string) => void;
   onOpenNewReport?: () => void;
+  onNavigatePending?: () => void;
   onLogAction?: (action: string, details: string, type?: 'INFO' | 'WARNING' | 'SUCCESS' | 'ERROR') => void;
 }
 
@@ -49,6 +51,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
   onEditReport,
   onDeleteReport,
   onOpenNewReport,
+  onNavigatePending,
 }) => {
   const today = getTodayDateString();
   const [searchTerm, setSearchTerm] = useState('');
@@ -323,6 +326,17 @@ export const ReportsList: React.FC<ReportsListProps> = ({
 
           {/* Export & Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
+            {onNavigatePending && (
+              <button
+                onClick={onNavigatePending}
+                className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                title="View offices with pending reports"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Pending Offices (دفاتر زیر التواء)</span>
+              </button>
+            )}
+
             <button
               onClick={handlePrintA4}
               className="bg-gray-800 hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center space-x-1.5 shadow-xs cursor-pointer"

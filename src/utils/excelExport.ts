@@ -54,19 +54,50 @@ export function exportDailyReportsToExcel(reports: DailyReport[], filename: stri
   XLSX.writeFile(workbook, `${filename}.xlsx`);
 }
 
-export function exportPendingOfficesToExcel(pendingList: { office: PostOffice; lastReportDate?: string }[]) {
-  const data = pendingList.map((item, idx) => ({
-    'S.No': idx + 1,
-    'Office Name': item.office.name,
-    'Postmaster Name': item.office.postmasterName,
-    'Mobile Number': item.office.mobileNumber,
-    'Status': 'PENDING',
-    'Last Submitted Date': item.lastReportDate ? formatDatePK(item.lastReportDate) : 'Never Submitted',
-  }));
+export function exportPendingOfficesToExcel(
+  pendingList: {
+    office: PostOffice;
+    lastReportDate?: string;
+    missingDates?: string[];
+  }[],
+  selectedDate?: string
+) {
+  let totalMissingCount = 0;
+
+  const data = pendingList.map((item, idx) => {
+    const dates = item.missingDates || (selectedDate ? [selectedDate] : []);
+    const count = dates.length > 0 ? dates.length : 1;
+    totalMissingCount += count;
+    const missingDatesStr = dates.map((d) => formatDatePK(d)).join(', ');
+
+    return {
+      'S.No': idx + 1,
+      'Office Name': item.office.name,
+      'Postmaster / Incharge': item.office.postmasterName || 'N/A',
+      'Mobile Number': item.office.mobileNumber || '-',
+      'Pending Reports Count': count,
+      'Missing Dates (مورخہ جات)': missingDatesStr,
+      'Last Submitted Date': item.lastReportDate ? formatDatePK(item.lastReportDate) : 'Never Submitted',
+      'Status': 'PENDING / DEFAULTER',
+    };
+  });
+
+  // Add Summary Total Row
+  data.push({
+    'S.No': 0,
+    'Office Name': `TOTAL PENDING OFFICES: ${pendingList.length}`,
+    'Postmaster / Incharge': '',
+    'Mobile Number': '',
+    'Pending Reports Count': totalMissingCount,
+    'Missing Dates (مورخہ جات)': 'COMBINED SUPERVISOR SUMMARY',
+    'Last Submitted Date': '',
+    'Status': 'ACTION REQUIRED',
+  });
 
   const worksheet = XLSX.utils.json_to_sheet(data);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Pending Offices');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Pending Offices List');
 
-  XLSX.writeFile(workbook, `Pakistan_Post_Pending_Offices_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  const fileDate = selectedDate || new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(workbook, `Pakistan_Post_Supervisor_Pending_List_${fileDate}.xlsx`);
 }

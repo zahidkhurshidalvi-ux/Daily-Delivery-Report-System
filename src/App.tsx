@@ -530,6 +530,7 @@ export default function App() {
               setSelectedDate={setSelectedDate}
               currentUser={currentUser}
               onDeleteReport={handleDeleteReport}
+              onNavigatePending={() => setActiveTab('pending-reports')}
               onEditReport={(rep) => {
                 setEditingReport(rep);
                 setActiveTab('daily-reports');
@@ -543,6 +544,7 @@ export default function App() {
               postOffices={postOffices}
               reports={reports}
               selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
               whatsAppConfig={whatsAppConfig}
               onLogAction={logAction}
             />

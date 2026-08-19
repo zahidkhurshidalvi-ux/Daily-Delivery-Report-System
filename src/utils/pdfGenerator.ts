@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 
-import { DailyReport } from '../types';
+import { DailyReport, PostOffice } from '../types';
 import { formatDatePK, formatNumber, summarizeReports } from './calculations';
 
 export function generateDailyReportPDF(
@@ -10,7 +10,7 @@ export function generateDailyReportPDF(
   customTitle?: string
 ) {
   const doc = new jsPDF({
-    orientation: 'landscape',
+    orientation: 'portrait',
     unit: 'mm',
     format: 'a4',
   });
@@ -21,60 +21,60 @@ export function generateDailyReportPDF(
       ? ((totals.totalDelivered / totals.totalReceived) * 100).toFixed(1)
       : '0.0';
 
-  // Header Colors: Dark Green #00401A / #006633, Gold Accent #D4AF37
+  // Header Colors: Dark Green #00401A / #006633, Gold Accent #D4AF37 (A4 Portrait width: 210mm)
   doc.setFillColor(0, 64, 26); // Pakistan Post Dark Green
-  doc.rect(0, 0, 297, 24, 'F');
+  doc.rect(0, 0, 210, 24, 'F');
 
   // Gold Stripe
   doc.setFillColor(212, 175, 55);
-  doc.rect(0, 24, 297, 2, 'F');
+  doc.rect(0, 24, 210, 2, 'F');
 
   // Title Text
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text(customTitle || 'PAKISTAN POST - DAILY DELIVERY REPORT', 14, 11);
+  doc.setFontSize(13);
+  doc.text(customTitle || 'PAKISTAN POST - DAILY DELIVERY REPORT', 10, 10);
 
-  doc.setFontSize(9);
+  doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   doc.text(
     `OFFICE OF THE DIVISIONAL SUPERINTENDENT POSTAL SERVICES ${divisionName.toUpperCase()}`,
-    14,
-    18
+    10,
+    16
   );
 
   // Date Badge Right Aligned
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
+  doc.setFontSize(8.5);
   const dateLabel = reportDate.includes('TO') || reportDate.includes('FROM')
     ? reportDate
     : `DATE: ${formatDatePK(reportDate)}`;
-  doc.text(dateLabel, 283, 14, { align: 'right' });
+  doc.text(dateLabel, 200, 13, { align: 'right' });
 
-  // Summary Banner Card
+  // Summary Banner Card (Portrait 190mm wide)
   doc.setDrawColor(200, 200, 200);
   doc.setFillColor(245, 248, 245);
-  doc.roundedRect(14, 29, 269, 16, 2, 2, 'FD');
+  doc.roundedRect(10, 28, 190, 13, 2, 2, 'FD');
 
   doc.setTextColor(0, 102, 51);
-  doc.setFontSize(8.5);
+  doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
 
-  const bannerY = 39;
-  doc.text(`Reports: ${reports.length}`, 18, bannerY);
-  doc.text(`Last Bal: ${formatNumber(totals.totalLastBalance)}`, 48, bannerY);
-  doc.text(`Received: ${formatNumber(totals.totalReceived)}`, 85, bannerY);
-  doc.text(`Delivered: ${formatNumber(totals.totalDelivered)}`, 125, bannerY);
-  doc.text(`Deliv %: ${deliveryRate}%`, 165, bannerY);
-  doc.text(`Returned: ${formatNumber(totals.totalReturned)}`, 198, bannerY);
-  doc.text(`Missent: ${formatNumber(totals.totalMissent)}`, 232, bannerY);
-  doc.text(`Deposit: ${formatNumber(totals.totalDeposit)}`, 260, bannerY);
+  const bannerY = 36;
+  doc.text(`Offices: ${reports.length}`, 13, bannerY);
+  doc.text(`Last Bal: ${formatNumber(totals.totalLastBalance)}`, 38, bannerY);
+  doc.text(`Recv: ${formatNumber(totals.totalReceived)}`, 67, bannerY);
+  doc.text(`Deliv: ${formatNumber(totals.totalDelivered)}`, 93, bannerY);
+  doc.text(`Rate: ${deliveryRate}%`, 121, bannerY);
+  doc.text(`Ret: ${formatNumber(totals.totalReturned)}`, 146, bannerY);
+  doc.text(`Miss: ${formatNumber(totals.totalMissent)}`, 167, bannerY);
+  doc.text(`Dep: ${formatNumber(totals.totalDeposit)}`, 187, bannerY);
 
-  // Table Headers
-  const startY = 48;
-  const colWidths = [10, 48, 20, 22, 22, 18, 22, 20, 20, 67];
+  // Table Headers (Portrait Total width = 190mm: 7 + 45 + 16 + 16 + 16 + 14 + 15 + 15 + 15 + 31 = 190)
+  const startY = 44;
+  const colWidths = [7, 45, 16, 16, 16, 14, 15, 15, 15, 31];
   const headers = [
-    'S#',
+    '#',
     'Office Name',
     'Last Bal',
     'Received',
@@ -83,35 +83,53 @@ export function generateDailyReportPDF(
     'Returned',
     'Missent',
     'Deposit',
-    'Remarks / Status',
+    'Remarks',
   ];
 
   doc.setFillColor(0, 64, 26);
-  doc.rect(14, startY, 269, 7.5, 'F');
+  doc.rect(10, startY, 190, 6.5, 'F');
 
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
+  doc.setFontSize(7);
   doc.setFont('helvetica', 'bold');
 
-  let currentX = 14;
+  let currentX = 10;
   headers.forEach((h, idx) => {
     const align = idx >= 2 && idx <= 8 ? 'right' : 'left';
-    const textX = align === 'right' ? currentX + colWidths[idx] - 2 : currentX + 2;
-    doc.text(h, textX, startY + 5, { align });
+    const textX = align === 'right' ? currentX + colWidths[idx] - 1.5 : currentX + 1.5;
+    doc.text(h, textX, startY + 4.5, { align });
     currentX += colWidths[idx];
   });
 
   // Table Rows
-  let currentY = startY + 7.5;
+  let currentY = startY + 6.5;
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(30, 30, 30);
-  doc.setFontSize(7.5);
+  doc.setFontSize(6.5);
 
   reports.forEach((rep, index) => {
-    // Page overflow check
-    if (currentY > 172) {
+    // Page overflow check (A4 Portrait height is 297mm)
+    if (currentY > 260) {
       doc.addPage();
-      currentY = 16;
+      currentY = 14;
+      
+      // Print table header on subsequent pages
+      doc.setFillColor(0, 64, 26);
+      doc.rect(10, currentY, 190, 6.5, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      let pageX = 10;
+      headers.forEach((h, idx) => {
+        const align = idx >= 2 && idx <= 8 ? 'right' : 'left';
+        const textX = align === 'right' ? pageX + colWidths[idx] - 1.5 : pageX + 1.5;
+        doc.text(h, textX, currentY + 4.5, { align });
+        pageX += colWidths[idx];
+      });
+      currentY += 6.5;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(30, 30, 30);
+      doc.setFontSize(6.5);
     }
 
     const isNotSubmitted =
@@ -126,20 +144,20 @@ export function generateDailyReportPDF(
     // Row background
     if (isNotSubmitted) {
       doc.setFillColor(254, 242, 242); // light red
-      doc.rect(14, currentY, 269, 6.5, 'F');
+      doc.rect(10, currentY, 190, 5.5, 'F');
     } else if (index % 2 === 1) {
       doc.setFillColor(248, 250, 248);
-      doc.rect(14, currentY, 269, 6.5, 'F');
+      doc.rect(10, currentY, 190, 5.5, 'F');
     }
 
     // Row border bottom
     doc.setDrawColor(220, 220, 220);
-    doc.line(14, currentY + 6.5, 283, currentY + 6.5);
+    doc.line(10, currentY + 5.5, 200, currentY + 5.5);
 
-    let xPos = 14;
+    let xPos = 10;
     const rowData = [
       (index + 1).toString(),
-      rep.officeName,
+      rep.officeName.length > 28 ? rep.officeName.substring(0, 26) + '..' : rep.officeName,
       formatNumber(rep.lastBalance),
       formatNumber(rep.receivedToday),
       formatNumber(rep.delivered),
@@ -147,12 +165,12 @@ export function generateDailyReportPDF(
       formatNumber(rep.returnedToSender),
       formatNumber(rep.missent),
       formatNumber(rep.deposit),
-      isNotSubmitted ? 'Report not submitted till 5 PM' : (rep.remarks || '-'),
+      isNotSubmitted ? 'Pending (Not submitted)' : (rep.remarks ? (rep.remarks.length > 20 ? rep.remarks.substring(0, 18) + '..' : rep.remarks) : '-'),
     ];
 
     rowData.forEach((val, colIdx) => {
       const align = colIdx >= 2 && colIdx <= 8 ? 'right' : 'left';
-      const textX = align === 'right' ? xPos + colWidths[colIdx] - 2 : xPos + 2;
+      const textX = align === 'right' ? xPos + colWidths[colIdx] - 1.5 : xPos + 1.5;
 
       if (isNotSubmitted && colIdx === 9) {
         doc.setFont('helvetica', 'bold');
@@ -165,24 +183,29 @@ export function generateDailyReportPDF(
         doc.setTextColor(40, 40, 40);
       }
 
-      doc.text(val, textX, currentY + 4.5, { align });
+      doc.text(val, textX, currentY + 3.8, { align });
       xPos += colWidths[colIdx];
     });
 
-    currentY += 6.5;
+    currentY += 5.5;
   });
 
   // Grand Totals Row
+  if (currentY > 260) {
+    doc.addPage();
+    currentY = 14;
+  }
+
   doc.setFillColor(225, 238, 228);
-  doc.rect(14, currentY, 269, 7.5, 'F');
+  doc.rect(10, currentY, 190, 6.5, 'F');
   doc.setDrawColor(0, 64, 26);
-  doc.rect(14, currentY, 269, 7.5, 'S');
+  doc.rect(10, currentY, 190, 6.5, 'S');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(7);
   doc.setTextColor(0, 64, 26);
 
-  let xTot = 14;
+  let xTot = 10;
   const totalsRowData = [
     '',
     'GRAND TOTALS',
@@ -198,33 +221,33 @@ export function generateDailyReportPDF(
 
   totalsRowData.forEach((val, colIdx) => {
     const align = colIdx >= 2 && colIdx <= 8 ? 'right' : 'left';
-    const textX = align === 'right' ? xTot + colWidths[colIdx] - 2 : xTot + 2;
-    doc.text(val, textX, currentY + 5, { align });
+    const textX = align === 'right' ? xTot + colWidths[colIdx] - 1.5 : xTot + 1.5;
+    doc.text(val, textX, currentY + 4.5, { align });
     xTot += colWidths[colIdx];
   });
 
   // Signature Section
-  const sigY = Math.min(currentY + 18, 186);
+  const sigY = Math.min(currentY + 16, 275);
 
   doc.setDrawColor(120, 120, 120);
-  doc.line(20, sigY, 80, sigY);
-  doc.line(200, sigY, 270, sigY);
+  doc.line(15, sigY, 70, sigY);
+  doc.line(135, sigY, 195, sigY);
 
-  doc.setFontSize(8);
+  doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(60, 60, 60);
 
-  doc.text('Prepared By: System Admin / In-Charge', 20, sigY + 4);
-  doc.text('Divisional Superintendent Postal Services', 200, sigY + 4);
-  doc.text('Pakistan Post, Gujranwala Division', 200, sigY + 8);
+  doc.text('Prepared By: System Admin / In-Charge', 15, sigY + 3.5);
+  doc.text('Divisional Superintendent Postal Services', 135, sigY + 3.5);
+  doc.text('Pakistan Post, Gujranwala Division', 135, sigY + 7);
 
   // Footer
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);
   doc.setTextColor(120, 120, 120);
   doc.text(
     `Generated via Pakistan Post Daily Delivery System | Gujranwala Division | ${new Date().toLocaleString()}`,
-    14,
-    202
+    10,
+    290
   );
 
   return doc;
@@ -232,6 +255,488 @@ export function generateDailyReportPDF(
 
 /**
  * Printable HTML document trigger that reliably works in both standard browser windows and iframes
+ */
+/**
+ * Generates an official A4 Portrait PDF summary of all pending post offices for Divisional Supervisors.
+ */
+export function generatePendingReportPDF(
+  pendingList: {
+    office: PostOffice;
+    lastReportDate?: string;
+    missingDates: string[];
+  }[],
+  reportDate: string,
+  divisionName: string = 'Gujranwala Division'
+) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  // Header Colors: Dark Red #991B1B & Gold #D4AF37 for Pending/Defaulter Notices
+  doc.setFillColor(153, 27, 27); // Dark Red
+  doc.rect(0, 0, 210, 24, 'F');
+
+  // Gold Stripe
+  doc.setFillColor(212, 175, 55);
+  doc.rect(0, 24, 210, 2, 'F');
+
+  // Title Text
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('PAKISTAN POST - PENDING OFFICES COMPLIANCE REPORT', 10, 10);
+
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(
+    `OFFICE OF THE DIVISIONAL SUPERINTENDENT POSTAL SERVICES ${divisionName.toUpperCase()}`,
+    10,
+    16
+  );
+
+  // Date Badge Right Aligned
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text(`DATE: ${formatDatePK(reportDate)}`, 200, 13, { align: 'right' });
+
+  // Summary Banner Card
+  doc.setDrawColor(220, 38, 38);
+  doc.setFillColor(254, 242, 242);
+  doc.roundedRect(10, 28, 190, 12, 2, 2, 'FD');
+
+  const totalMissingSubmissions = pendingList.reduce(
+    (acc, p) => acc + (p.missingDates.length > 0 ? p.missingDates.length : 1),
+    0
+  );
+
+  doc.setTextColor(153, 27, 27);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  const bannerY = 35.5;
+  doc.text(`Total Pending Offices: ${pendingList.length}`, 14, bannerY);
+  doc.text(`Total Missing Dates/Reports: ${totalMissingSubmissions}`, 85, bannerY);
+  doc.text(`Status: IMMEDIATE ACTION REQUIRED`, 150, bannerY);
+
+  // Table Headers (Total Width: 190mm -> 8 + 48 + 36 + 26 + 18 + 54 = 190)
+  const startY = 43;
+  const colWidths = [8, 48, 36, 26, 18, 54];
+  const headers = [
+    '#',
+    'Post Office Name',
+    'Postmaster / Incharge',
+    'Mobile Number',
+    'Pending',
+    'Pending Dates (مورخہ جات)',
+  ];
+
+  doc.setFillColor(153, 27, 27);
+  doc.rect(10, startY, 190, 6.5, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+
+  let currentX = 10;
+  headers.forEach((h, idx) => {
+    const align = idx === 4 ? 'center' : idx === 0 ? 'center' : 'left';
+    const textX =
+      align === 'center'
+        ? currentX + colWidths[idx] / 2
+        : currentX + 1.5;
+    doc.text(h, textX, startY + 4.5, { align });
+    currentX += colWidths[idx];
+  });
+
+  // Table Rows
+  let currentY = startY + 6.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(30, 30, 30);
+  doc.setFontSize(6.5);
+
+  pendingList.forEach((item, index) => {
+    // Check page overflow
+    if (currentY > 260) {
+      doc.addPage();
+      currentY = 14;
+
+      doc.setFillColor(153, 27, 27);
+      doc.rect(10, currentY, 190, 6.5, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      let pageX = 10;
+      headers.forEach((h, idx) => {
+        const align = idx === 4 ? 'center' : idx === 0 ? 'center' : 'left';
+        const textX =
+          align === 'center'
+            ? pageX + colWidths[idx] / 2
+            : pageX + 1.5;
+        doc.text(h, textX, currentY + 4.5, { align });
+        pageX += colWidths[idx];
+      });
+      currentY += 6.5;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(30, 30, 30);
+      doc.setFontSize(6.5);
+    }
+
+    if (index % 2 === 1) {
+      doc.setFillColor(254, 242, 242);
+      doc.rect(10, currentY, 190, 5.5, 'F');
+    }
+
+    doc.setDrawColor(220, 220, 220);
+    doc.line(10, currentY + 5.5, 200, currentY + 5.5);
+
+    const datesFormatted =
+      item.missingDates.length > 0
+        ? item.missingDates.map((d) => formatDatePK(d)).join(', ')
+        : formatDatePK(reportDate);
+
+    const rowData = [
+      (index + 1).toString(),
+      item.office.name.length > 30 ? item.office.name.substring(0, 28) + '..' : item.office.name,
+      item.office.postmasterName || 'N/A',
+      item.office.mobileNumber || '-',
+      (item.missingDates.length > 0 ? item.missingDates.length : 1).toString(),
+      datesFormatted.length > 38 ? datesFormatted.substring(0, 36) + '..' : datesFormatted,
+    ];
+
+    let xPos = 10;
+    rowData.forEach((val, colIdx) => {
+      const align = colIdx === 4 ? 'center' : colIdx === 0 ? 'center' : 'left';
+      const textX =
+        align === 'center'
+          ? xPos + colWidths[colIdx] / 2
+          : xPos + 1.5;
+
+      if (colIdx === 1) {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(153, 27, 27);
+      } else if (colIdx === 4) {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(185, 28, 28);
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(40, 40, 40);
+      }
+
+      doc.text(val, textX, currentY + 3.8, { align });
+      xPos += colWidths[colIdx];
+    });
+
+    currentY += 5.5;
+  });
+
+  // Total Summary Footer Row
+  if (currentY > 260) {
+    doc.addPage();
+    currentY = 14;
+  }
+
+  doc.setFillColor(254, 226, 226);
+  doc.rect(10, currentY, 190, 6.5, 'F');
+  doc.setDrawColor(153, 27, 27);
+  doc.rect(10, currentY, 190, 6.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(153, 27, 27);
+  doc.text(`TOTAL PENDING OFFICES: ${pendingList.length}`, 14, currentY + 4.5);
+  doc.text(`TOTAL PENDING DATES COUNT: ${totalMissingSubmissions}`, 118, currentY + 4.5);
+
+  // Signature Section
+  const sigY = Math.min(currentY + 16, 275);
+  doc.setDrawColor(120, 120, 120);
+  doc.line(15, sigY, 70, sigY);
+  doc.line(135, sigY, 195, sigY);
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(60, 60, 60);
+
+  doc.text('Prepared By: Monitoring In-Charge', 15, sigY + 3.5);
+  doc.text('Divisional Superintendent Postal Services', 135, sigY + 3.5);
+  doc.text('Pakistan Post, Gujranwala Division', 135, sigY + 7);
+
+  // Footer
+  doc.setFontSize(6.5);
+  doc.setTextColor(120, 120, 120);
+  doc.text(
+    `Generated via Pakistan Post Daily Delivery System | Gujranwala Division | ${new Date().toLocaleString()}`,
+    10,
+    290
+  );
+
+  return doc;
+}
+
+/**
+ * Printable HTML document trigger for Supervisor Combined Pending List (A4 Portrait)
+ */
+export function triggerPrintablePendingWindow(
+  pendingList: {
+    office: PostOffice;
+    lastReportDate?: string;
+    missingDates: string[];
+  }[],
+  selectedDate: string,
+  divisionName: string = 'Gujranwala Division'
+) {
+  const totalMissing = pendingList.reduce(
+    (acc, p) => acc + (p.missingDates.length > 0 ? p.missingDates.length : 1),
+    0
+  );
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Pakistan Post - Pending Offices Compliance List (${selectedDate})</title>
+        <meta charset="utf-8" />
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          * { box-sizing: border-box; }
+          body { 
+            font-family: Arial, Helvetica, sans-serif; 
+            padding: 10px; 
+            color: #000; 
+            background: #fff;
+            margin: 0;
+          }
+          .header { 
+            text-align: center;
+            border-bottom: 2px solid #b91c1c;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+          }
+          .header h1 { margin: 0; font-size: 16px; font-weight: 900; letter-spacing: 1px; color: #991b1b; }
+          .header h2 { margin: 3px 0 0 0; font-size: 11px; font-weight: 800; }
+          .header .title-badge { 
+            display: inline-block; 
+            font-size: 11.5px; 
+            font-weight: 900; 
+            border-top: 1px solid #991b1b; 
+            border-bottom: 1px solid #991b1b; 
+            padding: 2px 14px; 
+            margin-top: 6px;
+            background: #fee2e2;
+            color: #991b1b;
+          }
+          .meta-bar {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9.5px;
+            font-weight: bold;
+            border-top: 1px solid #999;
+            padding-top: 4px;
+            margin-top: 6px;
+          }
+          .summary-grid { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 6px; 
+            margin-top: 8px;
+            text-align: center; 
+            font-size: 9px; 
+          }
+          .summary-grid div {
+            border: 1px solid #b91c1c;
+            background: #fef2f2;
+            padding: 4px;
+          }
+          .summary-grid div strong { 
+            display: block; 
+            font-size: 13px; 
+            margin-top: 1px; 
+            font-weight: 900;
+            color: #991b1b;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-size: 9px; 
+            margin-top: 10px;
+            margin-bottom: 15px; 
+          }
+          th, td { 
+            border: 1px solid #000; 
+            padding: 4px 6px; 
+          }
+          th { 
+            background-color: #fee2e2; 
+            color: #991b1b;
+            font-weight: 800; 
+            text-align: left;
+            font-size: 8.5px;
+            text-transform: uppercase;
+          }
+          th.num, td.num { text-align: center; }
+          .grand-total td { 
+            background-color: #fee2e2; 
+            font-weight: 900; 
+            color: #991b1b;
+            border-top: 2px solid #991b1b; 
+            border-bottom: 2px solid #991b1b; 
+          }
+          .date-pill {
+            display: inline-block;
+            background: #fecaca;
+            border: 1px solid #f87171;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 8px;
+            font-family: monospace;
+            font-weight: bold;
+            margin: 1px;
+          }
+          .signatures { 
+            margin-top: 30px; 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 9.5px; 
+            font-weight: bold;
+          }
+          .sig-line { 
+            border-top: 1px solid #000; 
+            width: 200px; 
+            text-align: center; 
+            padding-top: 4px; 
+          }
+          @media print {
+            .no-print { display: none !important; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print" style="margin-bottom: 12px; display: flex; gap: 8px;">
+          <button onclick="window.print()" style="background:#991B1B; color:white; border:none; padding:8px 16px; font-weight:bold; cursor:pointer; border-radius:4px; font-size:12px;">🖨️ Print Pending List (A4 Portrait)</button>
+        </div>
+
+        <div class="header">
+          <h1>PAKISTAN POST</h1>
+          <h2>OFFICE OF THE DIVISIONAL SUPERINTENDENT POSTAL SERVICES ${divisionName.toUpperCase()}</h2>
+          <div>
+            <span class="title-badge">PENDING POST OFFICES COMPLIANCE LIST (زیر التواء دفاتر کی تفصیلی فہرست)</span>
+          </div>
+          <div class="meta-bar">
+            <div>DIVISION: <u>${divisionName.toUpperCase()}</u></div>
+            <div>TARGET DATE: <u>${formatDatePK(selectedDate)}</u></div>
+            <div>GENERATED: <u>${new Date().toLocaleString('en-GB')}</u></div>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div>Pending Post Offices<strong>${pendingList.length}</strong></div>
+          <div>Total Missing Reports<strong>${totalMissing}</strong></div>
+          <div>Compliance Status<strong>ACTION REQUIRED</strong></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:24px;">#</th>
+              <th>Post Office Name</th>
+              <th>Postmaster / Incharge Name</th>
+              <th>Mobile Number</th>
+              <th class="num" style="width:50px;">Pending Count</th>
+              <th>Missing Dates (زیر التواء مورخہ جات)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pendingList
+              .map((item, idx) => {
+                const datesFormatted =
+                  item.missingDates.length > 0
+                    ? item.missingDates
+                        .map((d) => `<span class="date-pill">${formatDatePK(d)}</span>`)
+                        .join(' ')
+                    : `<span class="date-pill">${formatDatePK(selectedDate)}</span>`;
+
+                return `
+              <tr>
+                <td style="text-align:center; font-weight:bold;">${idx + 1}</td>
+                <td><strong style="color:#991b1b;">${item.office.name}</strong></td>
+                <td>${item.office.postmasterName || 'N/A'}</td>
+                <td style="font-family:monospace; font-weight:bold;">${item.office.mobileNumber || '-'}</td>
+                <td class="num"><strong style="color:#b91c1c;">${item.missingDates.length > 0 ? item.missingDates.length : 1}</strong></td>
+                <td>${datesFormatted}</td>
+              </tr>
+            `;
+              })
+              .join('')}
+            <tr class="grand-total">
+              <td></td>
+              <td>TOTAL DEFAULTER OFFICES: ${pendingList.length}</td>
+              <td colspan="2"></td>
+              <td class="num">${totalMissing}</td>
+              <td>All Pending Records Listed Above</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="signatures">
+          <div class="sig-line">Prepared By: Compliance Monitor<br><small>${divisionName}</small></div>
+          <div class="sig-line">
+            Divisional Superintendent Postal Services<br>
+            <small>Pakistan Post, ${divisionName}</small>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  try {
+    const printWindow = window.open('', '_blank');
+    if (printWindow && !printWindow.closed) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 400);
+      return;
+    }
+  } catch (e) {
+    console.warn('Popup blocked, using hidden iframe printing mechanism:', e);
+  }
+
+  // Fallback iframe
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (doc) {
+    doc.open();
+    doc.write(html);
+    doc.close();
+    iframe.contentWindow?.focus();
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(iframe);
+        } catch (_) {}
+      }, 2000);
+    }, 400);
+  } else {
+    window.print();
+  }
+}
+
+/**
+ * Printable HTML document trigger that reliably works in both standard browser windows and iframes (A4 Portrait)
  */
 export function triggerPrintableWindow(reports: DailyReport[], dateStr: string, officeName?: string) {
   const totals = summarizeReports(reports);

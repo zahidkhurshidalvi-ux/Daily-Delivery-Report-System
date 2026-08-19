@@ -15,6 +15,10 @@ import {
 } from '../utils/whatsapp';
 import { exportPendingOfficesToExcel } from '../utils/excelExport';
 import {
+  generatePendingReportPDF,
+  triggerPrintablePendingWindow,
+} from '../utils/pdfGenerator';
+import {
   Clock,
   Send,
   MessageSquare,
@@ -30,12 +34,21 @@ import {
   Play,
   X,
   Layers,
+  Search,
+  User,
+  Filter,
+  Calendar,
+  Phone,
+  RefreshCw,
+  Printer,
+  FileDown,
 } from 'lucide-react';
 
 interface PendingReportsProps {
   postOffices: PostOffice[];
   reports: DailyReport[];
   selectedDate: string;
+  setSelectedDate?: (date: string) => void;
   whatsAppConfig: WhatsAppConfig;
   onLogAction: (action: string, details: string) => void;
 }
@@ -53,11 +66,15 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   postOffices,
   reports,
   selectedDate,
+  setSelectedDate,
   whatsAppConfig,
   onLogAction,
 }) => {
   const validOffices = cleanAndFilterPostOffices(postOffices);
   const validReports = cleanAndFilterReports(reports);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterMode, setFilterMode] = useState<'ALL_PENDING' | 'MULTI_DATE_ONLY'>('ALL_PENDING');
 
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
   const dateReports = validReports.filter((r) => r.date === selectedDate);
@@ -80,6 +97,26 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
       };
     });
 
+  // Filter based on search & view mode
+  const filteredPendingList = pendingList.filter((item) => {
+    if (filterMode === 'MULTI_DATE_ONLY' && item.missingDates.length <= 1) {
+      return false;
+    }
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      item.office.name.toLowerCase().includes(term) ||
+      (item.office.postmasterName || '').toLowerCase().includes(term) ||
+      (item.office.mobileNumber || '').includes(term)
+    );
+  });
+
+  // Total missing reports count across all pending offices
+  const totalPendingReportsCount = pendingList.reduce(
+    (sum, item) => sum + (item.missingDates.length > 0 ? item.missingDates.length : 1),
+    0
+  );
+
   const [notification, setNotification] = useState<{
     type: 'SUCCESS' | 'ERROR' | 'INFO';
     text: string;
@@ -91,6 +128,15 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [copiedText, setCopiedText] = useState(false);
   const [singleSendingId, setSingleSendingId] = useState<string | null>(null);
+  const [copiedOfficeId, setCopiedOfficeId] = useState<string | null>(null);
+
+  const handleCopySingleMessage = (office: PostOffice, missingDates: string[]) => {
+    const reminderText = getUrduReminderTemplate(missingDates.length > 0 ? missingDates : selectedDate);
+    const fullMsg = `محترم پوسٹ ماسٹر صاحب (${office.name})،\n\n` + reminderText + `\n\n${whatsAppConfig.webAppUrl}`;
+    navigator.clipboard.writeText(fullMsg);
+    setCopiedOfficeId(office.id);
+    setTimeout(() => setCopiedOfficeId(null), 2000);
+  };
 
   const handleSendSingleReminder = async (office: PostOffice, missingDates: string[]) => {
     setSingleSendingId(office.id);
@@ -229,50 +275,187 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
     setTimeout(() => setCopiedText(false), 2500);
   };
 
+  const handleDownloadSupervisorPDF = () => {
+    const doc = generatePendingReportPDF(pendingList, selectedDate);
+    doc.save(`Pakistan_Post_Supervisor_Pending_List_${selectedDate}.pdf`);
+  };
+
+  const handlePrintSupervisorPending = () => {
+    triggerPrintablePendingWindow(pendingList, selectedDate);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
+      {/* Top Banner & Date Selector */}
       <div className="bg-white border border-gray-200 p-5 rounded-lg shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <span className="bg-red-600 text-white font-bold text-[10px] px-2 py-0.5 rounded uppercase tracking-wider">
-              Pending Monitoring Unit
+            <span className="bg-red-600 text-white font-bold text-[10px] px-2.5 py-0.5 rounded uppercase tracking-wider flex items-center space-x-1 shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping mr-1" />
+              Live Pending Monitor
             </span>
             <span className="text-gray-500 text-xs font-mono">Date: {formatDatePK(selectedDate)}</span>
           </div>
-          <h2 className="text-xl font-extrabold text-gray-900 tracking-tight mt-1">
+          <h2 className="text-xl font-black text-gray-900 tracking-tight mt-1.5">
             Offices Pending Daily Delivery Report ({pendingList.length})
           </h2>
-          <p className="text-xs text-gray-500 mt-0.5 font-medium">
-            {activeOffices.length - pendingList.length} of {activeOffices.length} offices submitted today.
+          <p className="text-xs text-gray-600 mt-0.5 font-medium">
+            <strong className="text-emerald-700">{activeOffices.length - pendingList.length}</strong> of {activeOffices.length} offices submitted today. Total missing submissions: <strong className="text-red-600">{totalPendingReportsCount}</strong>.
           </p>
         </div>
 
-        {/* Bulk Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Date Selector & Bulk Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Live Date Picker */}
+          {setSelectedDate && (
+            <div className="flex items-center space-x-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-300">
+              <Calendar className="w-3.5 h-3.5 text-[#006633]" />
+              <label className="text-xs font-bold text-gray-700">Date:</label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-white text-gray-800 text-xs px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#006633] font-medium"
+              />
+              {selectedDate !== getTodayDateString() && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(getTodayDateString())}
+                  className="text-[10px] bg-[#006633] text-white px-2 py-0.5 rounded font-bold hover:bg-[#00401A] transition-colors"
+                  title="Jump to Today's date"
+                >
+                  Today
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Supervisor Combined Report Buttons */}
+          <button
+            onClick={handlePrintSupervisorPending}
+            disabled={pendingList.length === 0}
+            className="bg-gray-800 hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center space-x-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+            title="Print A4 Portrait Supervisor Pending List"
+          >
+            <Printer className="w-3.5 h-3.5 text-yellow-400" />
+            <span>Print Supervisor List (A4)</span>
+          </button>
+
+          <button
+            onClick={handleDownloadSupervisorPDF}
+            disabled={pendingList.length === 0}
+            className="bg-red-700 hover:bg-red-800 text-white font-bold text-xs px-3 py-2 rounded-lg transition-all shadow-xs flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+            title="Download Combined Pending List PDF for Supervisor"
+          >
+            <FileDown className="w-3.5 h-3.5" />
+            <span>Supervisor PDF</span>
+          </button>
+
+          <button
+            onClick={() => exportPendingOfficesToExcel(pendingList, selectedDate)}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors cursor-pointer flex items-center space-x-1"
+            title="Export full pending list to Excel"
+          >
+            <Download className="w-3.5 h-3.5 inline mr-0.5 text-yellow-300" />
+            <span>Excel Export</span>
+          </button>
+
           <button
             onClick={() => prepareBroadcastQueue('REMINDER_ALL')}
             disabled={pendingList.length === 0}
-            className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-all shadow-xs flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+            className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3 py-2 rounded-lg transition-all shadow-xs flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
           >
             <Send className="w-3.5 h-3.5" />
-            <span>Remind All Pending ({pendingList.length})</span>
+            <span>Remind All ({pendingList.length})</span>
           </button>
 
           <button
             onClick={() => prepareBroadcastQueue('SUMMARY_ALL')}
-            className="bg-[#005522] hover:bg-[#00401A] text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer"
+            className="bg-[#005522] hover:bg-[#00401A] text-white font-bold text-xs px-3 py-2 rounded-lg transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer"
           >
             <MessageSquare className="w-3.5 h-3.5 text-yellow-400" />
-            <span>Broadcast Summary to All</span>
+            <span>Broadcast Summary</span>
           </button>
+        </div>
+      </div>
 
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div className="bg-white border border-gray-200 p-3.5 rounded-lg shadow-xs">
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total Active Offices</p>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-2xl font-black text-gray-900">{activeOffices.length}</span>
+            <Building className="w-5 h-5 text-gray-400" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-emerald-200 bg-emerald-50/20 p-3.5 rounded-lg shadow-xs">
+          <p className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Submitted Today</p>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-2xl font-black text-[#006633]">{activeOffices.length - pendingList.length}</span>
+            <CheckCircle2 className="w-5 h-5 text-[#006633]" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-red-200 bg-red-50/20 p-3.5 rounded-lg shadow-xs">
+          <p className="text-[10px] text-red-800 font-bold uppercase tracking-wider">Pending Offices Today</p>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-2xl font-black text-red-600">{pendingList.length}</span>
+            <Clock className="w-5 h-5 text-red-600" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-amber-200 bg-amber-50/20 p-3.5 rounded-lg shadow-xs">
+          <p className="text-[10px] text-amber-800 font-bold uppercase tracking-wider">Total Pending Submissions</p>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-2xl font-black text-amber-700">{totalPendingReportsCount}</span>
+            <CalendarDays className="w-5 h-5 text-amber-700" />
+          </div>
+        </div>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div className="bg-white border border-gray-200 p-3.5 rounded-lg shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search office, postmaster, or mobile..."
+            className="w-full pl-9 pr-4 py-1.5 text-xs rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#006633] focus:border-[#006633]"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+          <span className="text-xs text-gray-500 font-medium">Filter:</span>
           <button
-            onClick={() => exportPendingOfficesToExcel(pendingList)}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-3 py-2 rounded-lg border border-gray-300 transition-colors cursor-pointer"
+            onClick={() => setFilterMode('ALL_PENDING')}
+            className={`px-3 py-1 text-xs font-bold rounded-md transition-colors cursor-pointer ${
+              filterMode === 'ALL_PENDING'
+                ? 'bg-gray-900 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
           >
-            <Download className="w-3.5 h-3.5 inline mr-1" />
-            <span>Export Excel</span>
+            All Pending ({pendingList.length})
+          </button>
+          <button
+            onClick={() => setFilterMode('MULTI_DATE_ONLY')}
+            className={`px-3 py-1 text-xs font-bold rounded-md transition-colors cursor-pointer ${
+              filterMode === 'MULTI_DATE_ONLY'
+                ? 'bg-red-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Multi-Date Pending ({pendingList.filter((p) => p.missingDates.length > 1).length})
           </button>
         </div>
       </div>
@@ -307,23 +490,24 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
 
       {/* Pending Offices Table */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-        {pendingList.length > 0 ? (
+        {filteredPendingList.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider border-b border-gray-200 text-[10px]">
+              <thead className="bg-gray-50 text-gray-700 font-black uppercase tracking-wider border-b border-gray-200 text-[10.5px]">
                 <tr>
-                  <th className="p-2.5">#</th>
-                  <th className="p-2.5">Office Name</th>
-                  <th className="p-2.5">Postmaster Name</th>
-                  <th className="p-2.5">Mobile Number</th>
-                  <th className="p-2.5">Pending Dates (مورخہ جات)</th>
-                  <th className="p-2.5">Last Submitted</th>
-                  <th className="p-2.5 text-center">Status</th>
-                  <th className="p-2.5 text-center">1-Click WhatsApp</th>
+                  <th className="p-3">#</th>
+                  <th className="p-3">Office Name (دفتر کا نام)</th>
+                  <th className="p-3">Postmaster Name (پوسٹ ماسٹر)</th>
+                  <th className="p-3">Mobile Number (رابطہ نمبر)</th>
+                  <th className="p-3">Pending Count (تعداد)</th>
+                  <th className="p-3">Missing Dates (مورخہ جات)</th>
+                  <th className="p-3">Last Submitted</th>
+                  <th className="p-3 text-center">Live Status</th>
+                  <th className="p-3 text-center">Actions & WhatsApp</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
-                {pendingList.map((item, idx) => {
+                {filteredPendingList.map((item, idx) => {
                   const reminderMsg = getUrduReminderTemplate(item.missingDates.length > 0 ? item.missingDates : selectedDate);
                   const directLink = generateWhatsAppWebLink(
                     item.office.mobileNumber,
@@ -332,58 +516,101 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                   );
 
                   return (
-                    <tr key={item.office.id} className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-2.5 text-gray-400 font-medium">{idx + 1}</td>
-                      <td className="p-2.5 font-bold text-gray-900">
-                        {item.office.name}
+                    <tr key={item.office.id} className="hover:bg-red-50/30 transition-colors">
+                      <td className="p-3 text-gray-400 font-mono font-bold">{idx + 1}</td>
+                      <td className="p-3 font-extrabold text-gray-900">
+                        <div className="flex items-center space-x-2">
+                          <Building className="w-3.5 h-3.5 text-[#006633] shrink-0" />
+                          <span>{item.office.name}</span>
+                        </div>
                       </td>
-                      <td className="p-2.5 text-gray-700">{item.office.postmasterName}</td>
-                      <td className="p-2.5 text-[#006633] font-mono font-bold">{item.office.mobileNumber}</td>
-                      <td className="p-2.5">
+                      <td className="p-3 font-semibold text-gray-800">
+                        <div className="flex items-center space-x-1.5">
+                          <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                          <span>{item.office.postmasterName || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td className="p-3 text-[#006633] font-mono font-bold">
+                        <div className="flex items-center space-x-1">
+                          <Phone className="w-3 h-3 text-[#006633] shrink-0" />
+                          <span>{item.office.mobileNumber}</span>
+                        </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-black ${
+                            item.missingDates.length > 1
+                              ? 'bg-red-100 text-red-800 border border-red-300 animate-pulse'
+                              : 'bg-amber-100 text-amber-800 border border-amber-300'
+                          }`}
+                        >
+                          {item.missingDates.length > 0 ? item.missingDates.length : 1}
+                        </span>
+                      </td>
+                      <td className="p-3">
                         {item.missingDates.length > 1 ? (
-                          <div className="space-y-1">
-                            <span className="bg-red-100 text-red-800 border border-red-300 text-[10px] px-2 py-0.5 rounded font-extrabold flex items-center w-max space-x-1">
-                              <CalendarDays className="w-3 h-3 text-red-700" />
-                              <span>{item.missingDates.length} Pending Dates</span>
-                            </span>
-                            <div className="text-[10px] text-red-700 font-mono font-semibold">
-                              {item.missingDates.map((d) => formatDatePK(d)).join(', ')}
+                          <div className="space-y-1 max-w-xs">
+                            <div className="flex flex-wrap gap-1">
+                              {item.missingDates.map((d) => (
+                                <span
+                                  key={d}
+                                  className="bg-red-50 text-red-700 border border-red-200 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold"
+                                >
+                                  {formatDatePK(d)}
+                                </span>
+                              ))}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-gray-800 font-medium text-xs">
+                          <span className="text-gray-800 font-mono font-semibold text-xs">
                             {formatDatePK(selectedDate)}
                           </span>
                         )}
                       </td>
-                      <td className="p-2.5 text-gray-500">
-                        {item.lastReportDate ? formatDatePK(item.lastReportDate) : 'Never'}
+                      <td className="p-3 text-gray-500 font-mono text-[11px]">
+                        {item.lastReportDate ? formatDatePK(item.lastReportDate) : <span className="text-red-500 font-bold">No Record</span>}
                       </td>
-                      <td className="p-2.5 text-center">
-                        <span className="bg-red-50 text-red-700 border border-red-200 text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider animate-pulse">
-                          PENDING ({item.missingDates.length})
+                      <td className="p-3 text-center">
+                        <span className="bg-red-50 text-red-700 border border-red-200 text-[9.5px] px-2 py-0.5 rounded font-black uppercase tracking-wider">
+                          PENDING
                         </span>
                       </td>
-                      <td className="p-2.5 text-center">
-                        <div className="flex items-center justify-center space-x-2">
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          {/* Send WhatsApp Cloud API / Direct */}
                           <button
                             onClick={() => handleSendSingleReminder(item.office, item.missingDates)}
                             disabled={singleSendingId === item.office.id}
-                            className="bg-[#25D366] hover:bg-emerald-600 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-md transition-all flex items-center space-x-1 shadow-xs cursor-pointer disabled:opacity-50"
+                            className="bg-[#25D366] hover:bg-emerald-600 text-white font-bold text-[10.5px] px-2.5 py-1.5 rounded-md transition-all flex items-center space-x-1 shadow-xs cursor-pointer disabled:opacity-50"
+                            title="Send WhatsApp Reminder"
                           >
                             {singleSendingId === item.office.id ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
                             ) : (
                               <Send className="w-3 h-3" />
                             )}
-                            <span>Send Reminder</span>
+                            <span>WhatsApp</span>
                           </button>
 
+                          {/* Copy Urdu Message */}
+                          <button
+                            onClick={() => handleCopySingleMessage(item.office, item.missingDates)}
+                            className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md border border-gray-300 transition-colors cursor-pointer"
+                            title="Copy Urdu Reminder Text"
+                          >
+                            {copiedOfficeId === item.office.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          {/* Direct WhatsApp Web link */}
                           <a
                             href={directLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 bg-gray-100 hover:bg-gray-200 text-[#006633] rounded-md border border-gray-300"
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#006633] rounded-md border border-emerald-300 transition-colors"
                             title="Open in WhatsApp Web"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -399,11 +626,24 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
         ) : (
           <div className="p-12 text-center text-gray-500 text-xs">
             <CheckCircle2 className="w-12 h-12 text-[#006633] mx-auto mb-3" />
-            <h3 className="text-sm font-extrabold text-gray-900 uppercase">100% Compliance Achieved!</h3>
+            <h3 className="text-sm font-extrabold text-gray-900 uppercase">
+              {searchTerm ? 'No Matching Offices' : '100% Compliance Achieved!'}
+            </h3>
             <p className="mt-1 text-gray-500 font-medium">
-              All active post offices have successfully submitted their Daily Delivery Reports for{' '}
-              {formatDatePK(selectedDate)}.
+              {searchTerm
+                ? 'Try a different search term or clear the filter.'
+                : `All active post offices have successfully submitted their Daily Delivery Reports for ${formatDatePK(
+                    selectedDate
+                  )}.`}
             </p>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="mt-3 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md font-bold transition-colors"
+              >
+                Clear Search Filter
+              </button>
+            )}
           </div>
         )}
       </div>
