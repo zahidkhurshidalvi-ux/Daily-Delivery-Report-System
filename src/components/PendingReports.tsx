@@ -6,6 +6,8 @@ import {
   getMissingDatesForOffice,
   cleanAndFilterPostOffices,
   cleanAndFilterReports,
+  isSunday,
+  getDayOfWeek,
 } from '../utils/calculations';
 import {
   getUrduReminderTemplate,
@@ -43,6 +45,7 @@ import {
   Printer,
   FileDown,
   AlertTriangle,
+  Sun,
 } from 'lucide-react';
 
 interface PendingReportsProps {
@@ -79,26 +82,29 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'ALL_PENDING' | 'MULTI_DATE_ONLY'>('ALL_PENDING');
 
+  const isSelectedDateSunday = isSunday(selectedDate);
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
   const dateReports = validReports.filter((r) => r.date === selectedDate);
   const submittedOfficeNames = new Set(dateReports.map((r) => r.officeName));
 
   const pendingList = activeOffices
-    .filter((po) => !submittedOfficeNames.has(po.name))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
     .map((office) => {
       const pastReports = validReports
         .filter((r) => r.officeName === office.name)
         .sort((a, b) => (a.date > b.date ? -1 : 1));
 
       const missingDates = getMissingDatesForOffice(office.name, selectedDate, validReports);
+      const isMissingToday = !isSelectedDateSunday && !submittedOfficeNames.has(office.name);
 
       return {
         office,
         lastReportDate: pastReports.length > 0 ? pastReports[0].date : undefined,
         missingDates,
+        isMissingToday,
       };
-    });
+    })
+    .filter((item) => (isSelectedDateSunday ? item.missingDates.length > 0 : item.isMissingToday || item.missingDates.length > 0))
+    .sort((a, b) => a.office.name.localeCompare(b.office.name, undefined, { sensitivity: 'base', numeric: true }));
 
   // Filter based on search & view mode
   const filteredPendingList = pendingList.filter((item) => {
@@ -329,6 +335,12 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                 >
                   Today
                 </button>
+              )}
+              {isSelectedDateSunday && (
+                <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] px-2 py-0.5 rounded font-bold flex items-center space-x-1">
+                  <Sun className="w-3 h-3 text-amber-600" />
+                  <span>Sunday Holiday</span>
+                </span>
               )}
             </div>
           )}

@@ -149,6 +149,14 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
     const parsedMissent = parseInt(missent, 10) || 0;
     const parsedDeposit = deposit === '' ? calculatedRemainingDeposit : parseInt(deposit, 10) || 0;
 
+    // 0. Sunday check: Sundays are official weekly closed holidays
+    if (isSunday(date)) {
+      setErrorMessage(
+        'Sunday is an official weekly closed holiday. Daily report submission is not required for Sundays.'
+      );
+      return;
+    }
+
     // 1. Validation check
     const valError = validateReportFields({
       date,

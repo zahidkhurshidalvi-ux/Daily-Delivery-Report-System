@@ -11,14 +11,16 @@ import {
   summarizeReports,
   getCompleteDateReports,
   getTodayDateString,
+  isSunday,
 } from '../utils/calculations';
 import {
   Printer,
   Download,
-  FileDown,
   Building,
   CheckCircle2,
   FileSpreadsheet,
+  Calendar,
+  Sun,
 } from 'lucide-react';
 
 interface PdfExportViewProps {
@@ -35,9 +37,14 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
   setSelectedDate,
 }) => {
   const [divisionName, setDivisionName] = useState('Gujranwala Division');
+
+  const isSelectedDateSunday = isSunday(selectedDate);
+
+  // Single date reports (with Sunday Holiday or Missing automatically filled with balance carry forward)
   const dateReports = getCompleteDateReports(reports, postOffices, selectedDate);
   const totals = summarizeReports(dateReports);
 
+  // Single Date Actions
   const handleDownloadPDF = () => {
     const doc = generateDailyReportPDF(dateReports, selectedDate, divisionName);
     doc.save(`Pakistan_Post_Daily_Report_${selectedDate}.pdf`);
@@ -62,13 +69,15 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
             </span>
             <span className="text-gray-500 text-xs font-mono">Official Superintendent Format</span>
           </div>
-          <h2 className="text-xl font-extrabold text-gray-900 tracking-tight mt-1">Generate PDF & Excel Reports</h2>
+          <h2 className="text-xl font-extrabold text-gray-900 tracking-tight mt-1">
+            Generate PDF & Excel Reports
+          </h2>
           <p className="text-xs text-gray-500 mt-0.5 font-medium">
-            Branded Pakistan Post documents complete with emblem headers, grand totals, and signature blocks.
+            Download official Pakistan Post daily delivery reports in PDF and Excel format.
           </p>
         </div>
 
-        {/* Date & Action Controls */}
+        {/* Date Selector & Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
@@ -86,6 +95,12 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
               Today
             </button>
           )}
+          {isSelectedDateSunday && (
+            <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] px-2 py-1 rounded font-bold flex items-center space-x-1">
+              <Sun className="w-3 h-3 text-amber-600" />
+              <span>Sunday Holiday</span>
+            </span>
+          )}
 
           <button
             onClick={handleDownloadPDF}
@@ -96,22 +111,35 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
           </button>
 
           <button
+            onClick={handleExcelExport}
+            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold px-3.5 py-2 rounded-lg border border-emerald-300 flex items-center space-x-1.5"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Download Excel</span>
+          </button>
+
+          <button
             onClick={handlePrint}
             className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-lg shadow-xs transition-all flex items-center space-x-1.5"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print Report</span>
           </button>
-
-          <button
-            onClick={handleExcelExport}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-2 rounded-lg border border-gray-300 flex items-center space-x-1.5"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-[#006633]" />
-            <span>Excel</span>
-          </button>
         </div>
       </div>
+
+      {/* Sunday Notification Banner if viewing a Sunday */}
+      {isSelectedDateSunday && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-amber-900 flex items-center space-x-3 text-xs">
+          <Sun className="w-5 h-5 text-amber-600 shrink-0" />
+          <div>
+            <strong className="font-bold">اتوار کی سرکاری چھٹی (Sunday Official Holiday)</strong>
+            <p className="mt-0.5 text-amber-800">
+              Sunday is a weekly closed holiday. No deliveries or pending status are enforced. All offices are designated with "Sunday Holiday (Weekly Closed)".
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Live On-Screen Document Paper Preview */}
       <div className="bg-gray-100 p-6 rounded-lg border border-gray-200">
@@ -127,14 +155,19 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                   <h1 className="text-lg font-black tracking-tight leading-tight uppercase">
                     PAKISTAN POST - DAILY DELIVERY REPORT
                   </h1>
-                  <p className="text-xs text-green-200 font-medium">{divisionName.toUpperCase()}</p>
+                  <p className="text-xs text-green-200 font-medium">
+                    OFFICE OF THE DIVISIONAL SUPERINTENDENT (PS) {divisionName.toUpperCase()}
+                  </p>
                 </div>
               </div>
             </div>
 
             <div className="text-right">
               <span className="text-xs font-bold text-yellow-400 block">OFFICIAL RECORD</span>
-              <span className="text-sm font-black">{formatDatePK(selectedDate)}</span>
+              <span className="text-sm font-black">
+                {formatDatePK(selectedDate)}
+                {isSelectedDateSunday ? ' (Sunday Holiday)' : ''}
+              </span>
             </div>
           </div>
 
@@ -203,7 +236,11 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {dateReports.map((r, idx) => {
-                    const isMissing = r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted');
+                    const rowIsSun = isSelectedDateSunday || isSunday(r.date);
+                    const isMissing =
+                      !rowIsSun &&
+                      (r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted'));
+
                     const rowRate =
                       r.receivedToday > 0
                         ? `${((r.delivered / r.receivedToday) * 100).toFixed(0)}%`
@@ -212,7 +249,15 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                     return (
                       <tr
                         key={r.id}
-                        className={isMissing ? 'bg-red-50/70' : idx % 2 === 1 ? 'bg-slate-50' : ''}
+                        className={
+                          rowIsSun
+                            ? 'bg-amber-50/50'
+                            : isMissing
+                            ? 'bg-red-50/70'
+                            : idx % 2 === 1
+                            ? 'bg-slate-50'
+                            : ''
+                        }
                       >
                         <td className="p-2 border border-slate-200 text-slate-500">{idx + 1}</td>
                         <td className="p-2 border border-slate-200 font-bold text-slate-900">
@@ -240,7 +285,11 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                           {formatNumber(r.deposit)}
                         </td>
                         <td className="p-2 border border-slate-200 font-medium">
-                          {isMissing ? (
+                          {rowIsSun ? (
+                            <span className="text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded text-[10px]">
+                              Sunday Holiday (Weekly Closed)
+                            </span>
+                          ) : isMissing ? (
                             <span className="text-red-700 font-bold bg-red-100 px-1.5 py-0.5 rounded text-[10px]">
                               Report not submitted till 5 PM
                             </span>
@@ -317,3 +366,4 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
     </div>
   );
 };
+

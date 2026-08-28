@@ -413,7 +413,7 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
 /**
  * Returns a list of daily reports for a target date, automatically including
  * entries for active post offices that have not submitted a report till 5 PM
- * with remarks 'Report not submitted till 5 PM'.
+ * with remarks 'Report not submitted till 5 PM' (or 'Sunday Holiday' on Sundays).
  */
 export function getCompleteDateReports(
   reports: DailyReport[],
@@ -425,6 +425,7 @@ export function getCompleteDateReports(
   const validOffices = cleanAndFilterPostOffices(postOffices);
   const validReports = cleanAndFilterReports(reports);
 
+  const isSundayDate = isSunday(targetDate);
   const dateReports = validReports.filter((r) => r.date === targetDate);
   const submittedOfficeNames = new Set(dateReports.map((r) => r.officeName));
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
@@ -444,6 +445,25 @@ export function getCompleteDateReports(
           prev.deposit > 0
             ? prev.deposit
             : Math.max(0, prev.lastBalance + prev.receivedToday - prev.delivered - prev.returnedToSender - prev.missent);
+      }
+
+      if (isSundayDate) {
+        return {
+          id: `sunday_${office.id}_${targetDate}`,
+          date: targetDate,
+          officeName: office.name,
+          postmasterName: office.postmasterName || '',
+          lastBalance: carriedBal,
+          receivedToday: 0,
+          delivered: 0,
+          returnedToSender: 0,
+          missent: 0,
+          deposit: carriedBal,
+          closingBalance: carriedBal,
+          remarks: 'Sunday Holiday (Weekly Closed)',
+          submittedBy: 'SUNDAY_HOLIDAY',
+          submittedAt: 'Sunday Holiday',
+        };
       }
 
       return {
@@ -487,6 +507,24 @@ export function isSunday(dateStr: string): boolean {
 }
 
 /**
+ * Returns Day of Week string (e.g. 'Monday', 'Sunday') for a date string.
+ */
+export function getDayOfWeek(dateStr: string): string {
+  if (!dateStr) return '';
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const parts = dateStr.split('T')[0].split(' ')[0].split('-');
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    return days[d.getDay()] || '';
+  }
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime()) ? days[d.getDay()] || '' : '';
+}
+
+/**
  * Returns all missing report dates for a specific office up to targetDate,
  * strictly EXCLUDING Sundays (Sunday Holiday / Weekly Closed).
  */
@@ -509,5 +547,35 @@ export function getMissingDatesForOffice(
   );
 
   return allDates.filter((d) => !submittedDates.has(d));
+}
+
+/**
+ * Returns complete daily reports for ALL dates present in the system,
+ * ensuring every date contains ALL active post offices (both submitted reports
+ * AND non-submitted/pending or Sunday holiday entries with carried forward balances).
+ */
+export function getAllDatesCompleteReports(
+  reports: DailyReport[],
+  postOffices: PostOffice[]
+): DailyReport[] {
+  const validOffices = cleanAndFilterPostOffices(postOffices);
+  const validReports = cleanAndFilterReports(reports);
+
+  // Extract all unique dates from existing reports
+  const dateSet = new Set<string>(validReports.map((r) => r.date).filter(Boolean));
+  if (dateSet.size === 0) {
+    dateSet.add(getTodayDateString());
+  }
+
+  // Sort dates chronologically ascending (oldest to newest)
+  const sortedDates = Array.from(dateSet).sort((a, b) => a.localeCompare(b));
+
+  const allCompleteReports: DailyReport[] = [];
+  for (const d of sortedDates) {
+    const singleDateComplete = getCompleteDateReports(validReports, validOffices, d);
+    allCompleteReports.push(...singleDateComplete);
+  }
+
+  return allCompleteReports;
 }
 
