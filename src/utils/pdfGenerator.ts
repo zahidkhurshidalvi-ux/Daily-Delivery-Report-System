@@ -238,8 +238,10 @@ export function generateDailyReportPDF(
   doc.setTextColor(60, 60, 60);
 
   doc.text('Prepared By: System Admin / In-Charge', 15, sigY + 3.5);
-  doc.text('Divisional Superintendent Postal Services', 135, sigY + 3.5);
-  doc.text('Pakistan Post, Gujranwala Division', 135, sigY + 7);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Divisional Superintendent (PS)', 135, sigY + 3.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(divisionName, 135, sigY + 7);
 
   // Footer
   doc.setFontSize(6.5);
@@ -458,8 +460,10 @@ export function generatePendingReportPDF(
   doc.setTextColor(60, 60, 60);
 
   doc.text('Prepared By: Monitoring In-Charge', 15, sigY + 3.5);
-  doc.text('Divisional Superintendent Postal Services', 135, sigY + 3.5);
-  doc.text('Pakistan Post, Gujranwala Division', 135, sigY + 7);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Divisional Superintendent (PS)', 135, sigY + 3.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(divisionName, 135, sigY + 7);
 
   // Footer
   doc.setFontSize(6.5);
@@ -683,8 +687,8 @@ export function triggerPrintablePendingWindow(
         <div class="signatures">
           <div class="sig-line">Prepared By: Compliance Monitor<br><small>${divisionName}</small></div>
           <div class="sig-line">
-            Divisional Superintendent Postal Services<br>
-            <small>Pakistan Post, ${divisionName}</small>
+            <strong>Divisional Superintendent (PS)</strong><br>
+            <span>${divisionName}</span>
           </div>
         </div>
       </body>
@@ -933,8 +937,8 @@ export function triggerPrintableWindow(reports: DailyReport[], dateStr: string, 
         <div class="signatures">
           <div class="sig-line">Prepared By: In-Charge / Data Operator<br><small>Gujranwala Division</small></div>
           <div class="sig-line">
-            Divisional Superintendent Postal Services<br>
-            <small>Pakistan Post, Gujranwala Division</small>
+            <strong>Divisional Superintendent (PS)</strong><br>
+            <span>Gujranwala Division</span>
           </div>
         </div>
       </body>

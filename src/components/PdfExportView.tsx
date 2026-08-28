@@ -305,9 +305,9 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
             </div>
             <div>
               <div className="w-64 border-t border-slate-500 pt-1 text-center font-bold text-[#006633]">
-                Divisional Superintendent Postal Services
-                <span className="block text-[10px] text-slate-500 font-normal">
-                  Pakistan Post, Gujranwala Division
+                Divisional Superintendent (PS)
+                <span className="block text-[10px] text-slate-700 font-bold">
+                  Gujranwala Division
                 </span>
               </div>
             </div>

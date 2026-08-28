@@ -35,6 +35,7 @@ import { PendingReports } from './components/PendingReports';
 import { PdfExportView } from './components/PdfExportView';
 import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
 import { UserManagement } from './components/UserManagement';
+import { IssueExplanation } from './components/IssueExplanation';
 import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
 
@@ -547,6 +548,9 @@ export default function App() {
               setSelectedDate={setSelectedDate}
               whatsAppConfig={whatsAppConfig}
               onLogAction={logAction}
+              onNavigateExplanation={(officeName) => {
+                setActiveTab('issue-explanation');
+              }}
             />
           )}
 
@@ -589,6 +593,16 @@ export default function App() {
               postOffices={postOffices}
               currentUser={currentUser}
               onChangePassword={handleChangePassword}
+            />
+          )}
+
+          {activeTab === 'issue-explanation' && (
+            <IssueExplanation
+              postOffices={postOffices}
+              reports={reports}
+              selectedDate={selectedDate}
+              currentUser={currentUser}
+              onLogAction={logAction}
             />
           )}
 

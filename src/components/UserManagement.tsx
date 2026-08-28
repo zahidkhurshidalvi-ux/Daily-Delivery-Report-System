@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User, PostOffice } from '../types';
 import { Users, ShieldCheck, Key, Lock, CheckCircle2 } from 'lucide-react';
 
 interface UserManagementProps {
   users: User[];
+  postOffices?: PostOffice[];
+  currentUser?: User | null;
   onChangePassword: (username: string, newPass: string) => void;
 }
 
-export const UserManagement: React.FC<UserManagementProps> = ({ users, onChangePassword }) => {
+export const UserManagement: React.FC<UserManagementProps> = ({
+  users,
+  postOffices = [],
+  currentUser,
+  onChangePassword,
+}) => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -24,7 +31,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onChangeP
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-gray-200 p-5 rounded-lg shadow-sm">
+      <div className="bg-white border border-gray-200 p-5 rounded-lg shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-green-50 border border-green-200 text-[#006633] rounded-lg flex items-center justify-center">
             <Users className="w-5 h-5" />
@@ -32,7 +39,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onChangeP
           <div>
             <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">System User Accounts & Credentials</h2>
             <p className="text-xs text-gray-500 font-medium">
-              Manage system access permissions and password credentials.
+              Manage system access permissions and user passwords.
             </p>
           </div>
         </div>
@@ -78,7 +85,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onChangeP
                   <td className="p-2.5 text-center">
                     <button
                       onClick={() => setSelectedUser(u)}
-                      className="bg-gray-100 hover:bg-amber-100 text-amber-800 px-3 py-1 rounded-md border border-gray-200 text-xs font-bold transition-colors"
+                      className="bg-gray-100 hover:bg-amber-100 text-amber-800 px-3 py-1 rounded-md border border-gray-200 text-xs font-bold transition-colors cursor-pointer"
                     >
                       Reset Pass
                     </button>

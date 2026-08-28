@@ -470,7 +470,25 @@ export function getCompleteDateReports(
 }
 
 /**
- * Returns all missing report dates for a specific office up to targetDate.
+ * Checks if a given date string (YYYY-MM-DD) is Sunday.
+ */
+export function isSunday(dateStr: string): boolean {
+  if (!dateStr) return false;
+  const parts = dateStr.split('T')[0].split(' ')[0].split('-');
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    return d.getDay() === 0;
+  }
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime()) && d.getDay() === 0;
+}
+
+/**
+ * Returns all missing report dates for a specific office up to targetDate,
+ * strictly EXCLUDING Sundays (Sunday Holiday / Weekly Closed).
  */
 export function getMissingDatesForOffice(
   officeName: string,
@@ -483,7 +501,7 @@ export function getMissingDatesForOffice(
   const allDates = Array.from(
     new Set([...reports.map((r) => r.date), targetDate])
   )
-    .filter((d) => d <= targetDate)
+    .filter((d) => d <= targetDate && !isSunday(d)) // Strictly exclude Sundays
     .sort();
 
   const submittedDates = new Set(

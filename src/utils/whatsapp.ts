@@ -13,7 +13,8 @@ ${listStr}
 براہ کرم فوراً اپنے تمام متعلقہ دنوں کی رپورٹس درج کریں۔
 
 شکریہ
-Divisional Superintendent Postal Services`;
+Divisional Superintendent (PS)
+Gujranwala Division`;
   }
 
   const singleDate = typeof dateOrDates === 'string'
@@ -28,7 +29,8 @@ Divisional Superintendent Postal Services`;
 براہ کرم فوراً اپنی رپورٹ درج کریں۔
 
 شکریہ
-Divisional Superintendent Postal Services`;
+Divisional Superintendent (PS)
+Gujranwala Division`;
 }
 
 export function getUrduSummaryTemplate(dateStr?: string): string {
@@ -38,7 +40,8 @@ export function getUrduSummaryTemplate(dateStr?: string): string {
 براہ کرم مورخہ ${formattedDate} کی Daily Delivery Report بروقت جمع کروائیں تاکہ روزانہ کی کارکردگی مرتب کی جا سکے۔
 
 شکریہ
-Divisional Superintendent Postal Services`;
+Divisional Superintendent (PS)
+Gujranwala Division`;
 }
 
 export const URDU_REMINDER_TEMPLATE = getUrduReminderTemplate();

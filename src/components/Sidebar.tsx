@@ -9,6 +9,7 @@ import {
   Users,
   MessageSquare,
   ScrollText,
+  AlertTriangle,
 } from 'lucide-react';
 
 export type NavTab =
@@ -19,6 +20,7 @@ export type NavTab =
   | 'pdf-exports'
   | 'post-offices'
   | 'users'
+  | 'issue-explanation'
   | 'whatsapp-triggers'
   | 'logs';
 
@@ -54,6 +56,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: 'pdf-exports', label: 'PDF & Excel Reports', icon: FileDown, role: 'ADMIN' },
           { id: 'post-offices', label: 'Post Offices Master', icon: Building, role: 'ADMIN' },
           { id: 'users', label: 'User Accounts', icon: Users, role: 'ADMIN' },
+          {
+            id: 'issue-explanation',
+            label: 'Issue Explanation Notice',
+            icon: AlertTriangle,
+            role: 'ADMIN',
+          },
           { id: 'whatsapp-triggers', label: 'WhatsApp & Triggers', icon: MessageSquare, role: 'ADMIN' },
           { id: 'logs', label: 'System Audit Logs', icon: ScrollText, role: 'ADMIN' },
         ]

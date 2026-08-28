@@ -7,6 +7,7 @@ import {
   getTodayDateString,
   formatDatePK,
   cleanAndFilterPostOffices,
+  isSunday,
 } from '../utils/calculations';
 import { AlertCircle, CheckCircle2, Calculator, Save, FileText } from 'lucide-react';
 
@@ -232,7 +233,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
               {editingReport ? 'Edit Daily Delivery Report' : 'Submit Daily Delivery Report'}
             </h2>
             <p className="text-xs text-gray-500 font-medium">
-              Official Form for Divisional Superintendent Postal Services
+              Official Form for Divisional Superintendent (PS)
             </p>
           </div>
         </div>
@@ -289,11 +290,22 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
             <input
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                const newDate = e.target.value;
+                setDate(newDate);
+                if (isSunday(newDate) && !remarks) {
+                  setRemarks('Sunday Holiday / Closed');
+                }
+              }}
               disabled={Boolean(editingReport)}
               className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
               required
             />
+            {isSunday(date) && (
+              <p className="text-[11px] text-amber-700 font-bold mt-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded flex items-center">
+                <span>⚠️ Sunday Holiday (Weekly Closed) — Excluded from missing reports & explanation notices.</span>
+              </p>
+            )}
           </div>
 
           <div>

@@ -42,6 +42,7 @@ import {
   RefreshCw,
   Printer,
   FileDown,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface PendingReportsProps {
@@ -51,6 +52,7 @@ interface PendingReportsProps {
   setSelectedDate?: (date: string) => void;
   whatsAppConfig: WhatsAppConfig;
   onLogAction: (action: string, details: string) => void;
+  onNavigateExplanation?: (officeName?: string) => void;
 }
 
 interface BroadcastItem {
@@ -69,6 +71,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   setSelectedDate,
   whatsAppConfig,
   onLogAction,
+  onNavigateExplanation,
 }) => {
   const validOffices = cleanAndFilterPostOffices(postOffices);
   const validReports = cleanAndFilterReports(reports);
@@ -591,6 +594,18 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                             )}
                             <span>WhatsApp</span>
                           </button>
+
+                          {/* Issue Explanation Call Button */}
+                          {onNavigateExplanation && (
+                            <button
+                              onClick={() => onNavigateExplanation(item.office.name)}
+                              className="bg-red-700 hover:bg-red-800 text-white font-bold text-[10.5px] px-2.5 py-1.5 rounded-md transition-all flex items-center space-x-1 shadow-xs cursor-pointer"
+                              title="Generate Official Explanation Call Letter for this Postmaster"
+                            >
+                              <AlertTriangle className="w-3 h-3 text-yellow-300" />
+                              <span>Explanation</span>
+                            </button>
+                          )}
 
                           {/* Copy Urdu Message */}
                           <button
