@@ -643,6 +643,10 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                               ))}
                             </div>
                           </div>
+                        ) : item.missingDates.length === 1 ? (
+                          <span className="text-gray-800 font-mono font-semibold text-xs">
+                            {formatDatePK(item.missingDates[0])}
+                          </span>
                         ) : (
                           <span className="text-gray-800 font-mono font-semibold text-xs">
                             {formatDatePK(selectedDate)}
@@ -721,11 +725,21 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
           <div className="p-12 text-center text-gray-500 text-xs">
             <CheckCircle2 className="w-12 h-12 text-[#006633] mx-auto mb-3" />
             <h3 className="text-sm font-extrabold text-gray-900 uppercase">
-              {searchTerm ? 'No Matching Offices' : '100% Compliance Achieved!'}
+              {searchTerm
+                ? 'No Matching Offices'
+                : isSelectedDateHoliday
+                ? `Public Holiday (${formatDatePK(selectedDate)}): 100% Excluded from Pendency`
+                : isSelectedDateSunday
+                ? `Sunday Holiday (${formatDatePK(selectedDate)}): Weekly Closed`
+                : '100% Compliance Achieved!'}
             </h3>
             <p className="mt-1 text-gray-500 font-medium">
               {searchTerm
                 ? 'Try a different search term or clear the filter.'
+                : isSelectedDateHoliday
+                ? `${holidayReason || 'Official Public Holiday'}. Daily report submissions are waived and all offices are completely exempt from pendency.`
+                : isSelectedDateSunday
+                ? 'Weekly Sunday closure. Daily report submissions are waived and all post offices are exempt.'
                 : `All active post offices have successfully submitted their Daily Delivery Reports for ${formatDatePK(
                     selectedDate
                   )}.`}

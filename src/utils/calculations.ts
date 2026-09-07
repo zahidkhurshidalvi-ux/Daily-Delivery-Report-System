@@ -1,4 +1,4 @@
-import { DailyReport, PostOffice } from '../types';
+import { DailyReport, PostOffice, OfficialHoliday } from '../types';
 
 /**
  * Calculates Today's Closing Balance using the official formula:
@@ -404,6 +404,9 @@ export const DEFAULT_OFFICIAL_HOLIDAYS: Record<string, string> = {
   '2026-08-26': 'Official Public Holiday (26/08/2026)',
 };
 
+// Global in-memory cache synchronized with Cloud Firestore in real time
+let inMemoryHolidays: Record<string, OfficialHoliday> | null = null;
+
 /**
  * Normalizes various date formats (YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY) into standard ISO YYYY-MM-DD.
  */
@@ -434,21 +437,104 @@ export function normalizeDateToIso(dateStr: string): string {
 }
 
 /**
- * Retrieves configured public holidays (default + custom stored in localStorage).
+ * Updates the global in-memory holidays cache (called on Firestore real-time snapshot).
+ */
+export function setInMemoryHolidays(holidays: Record<string, any> | null): void {
+  if (!holidays) return;
+  const map: Record<string, OfficialHoliday> = {};
+  for (const [key, val] of Object.entries(holidays)) {
+    const iso = normalizeDateToIso(key);
+    if (!iso) continue;
+    if (typeof val === 'string') {
+      map[iso] = {
+        date: iso,
+        title: val,
+        declaredBy: 'Divisional Administration',
+        declaredAt: new Date().toISOString(),
+      };
+    } else if (val && typeof val === 'object') {
+      map[iso] = {
+        date: iso,
+        title: val.title || 'Official Public Holiday',
+        declaredBy: val.declaredBy || 'Divisional Administration',
+        declaredAt: val.declaredAt || new Date().toISOString(),
+        notes: val.notes || '',
+      };
+    }
+  }
+  // Guarantee 2026-08-26 is always preserved
+  if (!map['2026-08-26']) {
+    map['2026-08-26'] = {
+      date: '2026-08-26',
+      title: 'Official Public Holiday (26/08/2026)',
+      declaredBy: 'Government Gazette Notification',
+      declaredAt: '2026-08-25T18:00:00.000Z',
+      notes: 'Gazetted Public Holiday - Excluded from all pendency',
+    };
+  }
+  inMemoryHolidays = map;
+}
+
+/**
+ * Retrieves configured public holidays (default + memory + custom stored in localStorage).
  */
 export function getCustomHolidays(): Record<string, string> {
+  const result: Record<string, string> = { ...DEFAULT_OFFICIAL_HOLIDAYS };
+
+  // 1. Read from localStorage
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       const saved = localStorage.getItem('pakpost_holidays');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { ...DEFAULT_OFFICIAL_HOLIDAYS, ...parsed };
+        if (typeof parsed === 'object' && parsed !== null) {
+          for (const [k, v] of Object.entries(parsed)) {
+            const iso = normalizeDateToIso(k);
+            if (iso) {
+              result[iso] = typeof v === 'string' ? v : (v as any)?.title || 'Official Public Holiday';
+            }
+          }
+        }
       }
     } catch (e) {
       // ignore JSON parse error
     }
   }
-  return { ...DEFAULT_OFFICIAL_HOLIDAYS };
+
+  // 2. Read from in-memory cache (real-time from Cloud Firestore)
+  if (inMemoryHolidays) {
+    for (const [k, v] of Object.entries(inMemoryHolidays)) {
+      const iso = normalizeDateToIso(k);
+      if (iso) {
+        result[iso] = v.title || 'Official Public Holiday';
+      }
+    }
+  }
+
+  // Double guarantee: 2026-08-26 is ALWAYS a public holiday
+  result['2026-08-26'] = result['2026-08-26'] || 'Official Public Holiday (26/08/2026)';
+  return result;
+}
+
+/**
+ * Retrieves list of all declared holidays as structured OfficialHoliday objects.
+ */
+export function getAllOfficialHolidays(): OfficialHoliday[] {
+  const map = getCustomHolidays();
+  const list: OfficialHoliday[] = [];
+
+  for (const [date, title] of Object.entries(map)) {
+    const mem = inMemoryHolidays ? inMemoryHolidays[date] : null;
+    list.push({
+      date,
+      title,
+      declaredBy: mem?.declaredBy || (date === '2026-08-26' ? 'Government Gazette Notification' : 'Divisional Administration'),
+      declaredAt: mem?.declaredAt || '2026-08-25T18:00:00.000Z',
+      notes: mem?.notes || (date === '2026-08-26' ? 'Gazetted Public Holiday - Excluded from all pendency' : 'Official Closed'),
+    });
+  }
+
+  return list.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 /**
@@ -457,6 +543,7 @@ export function getCustomHolidays(): Record<string, string> {
 export function isHoliday(dateStr: string): boolean {
   if (!dateStr) return false;
   const iso = normalizeDateToIso(dateStr);
+  if (iso === '2026-08-26') return true; // Hardcoded guarantee
   const holidays = getCustomHolidays();
   return Boolean(holidays[iso]);
 }
@@ -467,6 +554,9 @@ export function isHoliday(dateStr: string): boolean {
 export function getHolidayReason(dateStr: string): string | null {
   if (!dateStr) return null;
   const iso = normalizeDateToIso(dateStr);
+  if (iso === '2026-08-26') {
+    return 'Official Public Holiday (26/08/2026)';
+  }
   const holidays = getCustomHolidays();
   return holidays[iso] || null;
 }
@@ -481,15 +571,54 @@ export function isClosedOrHoliday(dateStr: string): boolean {
 /**
  * Adds or updates a holiday in custom holidays storage.
  */
-export function saveCustomHoliday(dateStr: string, reason: string): void {
+export function saveCustomHoliday(
+  dateStr: string,
+  reason: string,
+  declaredBy: string = 'Admin',
+  notes: string = ''
+): OfficialHoliday | null {
   const iso = normalizeDateToIso(dateStr);
-  if (!iso) return;
+  if (!iso) return null;
+
+  const newHoliday: OfficialHoliday = {
+    date: iso,
+    title: reason || 'Official Public Holiday',
+    declaredBy,
+    declaredAt: new Date().toISOString(),
+    notes,
+  };
+
   try {
     const current = getCustomHolidays();
-    current[iso] = reason || 'Public Holiday';
+    current[iso] = newHoliday.title;
     localStorage.setItem('pakpost_holidays', JSON.stringify(current));
   } catch (e) {
     // ignore
+  }
+
+  if (!inMemoryHolidays) inMemoryHolidays = {};
+  inMemoryHolidays[iso] = newHoliday;
+
+  return newHoliday;
+}
+
+/**
+ * Deletes a declared holiday from storage.
+ */
+export function deleteCustomHoliday(dateStr: string): void {
+  const iso = normalizeDateToIso(dateStr);
+  if (!iso) return;
+
+  try {
+    const current = getCustomHolidays();
+    delete current[iso];
+    localStorage.setItem('pakpost_holidays', JSON.stringify(current));
+  } catch (e) {
+    // ignore
+  }
+
+  if (inMemoryHolidays) {
+    delete inMemoryHolidays[iso];
   }
 }
 
@@ -513,12 +642,14 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
     const trimmedName = String(r.officeName).replace(/\s+/g, ' ').trim();
     if (isInvalidPostOfficeName(trimmedName)) continue;
 
+    const normalizedDate = normalizeDateToIso(r.date) || r.date;
+
     // Filter out 29/07/2026 and any dates before the official system launch date (17-08-2026)
-    if (r.date === '2026-07-29' || (r.date && r.date < SYSTEM_LAUNCH_DATE)) {
+    if (normalizedDate === '2026-07-29' || (normalizedDate && normalizedDate < SYSTEM_LAUNCH_DATE)) {
       continue;
     }
 
-    const dStr = String(r.date || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const dStr = String(normalizedDate || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     if (dStr.includes('date') || dStr.includes('reportdate') || dStr.includes('day')) continue;
 
     let pm = String(r.postmasterName || '').trim();
@@ -534,9 +665,10 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
     const dep = sanitizeArticleCount(r.deposit);
     const close = sanitizeArticleCount(r.closingBalance) || Math.max(0, lastBal + rec - del - ret - miss - dep);
 
-    const key = `${trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${r.date}`;
-    const sanitizedReport: DailyReport = {
+    const key = `${trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${normalizedDate}`;
+    let sanitizedReport: DailyReport = {
       ...r,
+      date: normalizedDate,
       officeName: trimmedName,
       postmasterName: pm,
       lastBalance: lastBal,
@@ -547,6 +679,17 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
       deposit: dep,
       closingBalance: close,
     };
+
+    // If date is a declared public holiday, and report was marked NOT_SUBMITTED,
+    // convert it to PUBLIC_HOLIDAY closed record so it never surfaces as pending!
+    if (isHoliday(normalizedDate)) {
+      if (sanitizedReport.submittedBy === 'NOT_SUBMITTED' || sanitizedReport.remarks?.includes('Report not submitted')) {
+        sanitizedReport.submittedBy = 'PUBLIC_HOLIDAY';
+        sanitizedReport.remarks = `${getHolidayReason(normalizedDate) || 'Public Holiday'} (Official Closed)`;
+        sanitizedReport.closingBalance = sanitizedReport.lastBalance;
+        sanitizedReport.deposit = sanitizedReport.lastBalance;
+      }
+    }
 
     const existing = officeDateMap.get(key);
     if (!existing) {
@@ -723,6 +866,21 @@ export function getCompleteDateReports(
     }
   }
 
+  // If this targetDate is a declared holiday, ensure NO report remains as NOT_SUBMITTED
+  if (isHolidayDate) {
+    for (const [key, rep] of officeReportMap.entries()) {
+      if (rep.submittedBy === 'NOT_SUBMITTED' || rep.remarks?.includes('Report not submitted')) {
+        officeReportMap.set(key, {
+          ...rep,
+          submittedBy: 'PUBLIC_HOLIDAY',
+          remarks: holidayReason ? `${holidayReason} (Official Closed)` : 'Official Public Holiday (Closed)',
+          closingBalance: rep.lastBalance,
+          deposit: rep.lastBalance,
+        });
+      }
+    }
+  }
+
   // Ensure every report has a strictly unique id
   const seenIds = new Set<string>();
   const finalReports: DailyReport[] = [];
@@ -786,33 +944,52 @@ export function getMissingDatesForOffice(
   targetDate: string,
   reports: DailyReport[]
 ): string[] {
-  if (!targetDate) return [];
+  if (!targetDate || !officeName) return [];
+
+  const isoTarget = normalizeDateToIso(targetDate);
 
   // If targetDate is before system launch date (17-08-2026) or is 29/07/2026, no pendency applies
-  if (targetDate < SYSTEM_LAUNCH_DATE || targetDate === '2026-07-29') {
+  if (!isoTarget || isoTarget < SYSTEM_LAUNCH_DATE || isoTarget === '2026-07-29') {
     return [];
   }
 
   // Get all unique dates present in reports up to targetDate, strictly bounded by SYSTEM_LAUNCH_DATE
   // Excludes 2026-07-29, any dates < SYSTEM_LAUNCH_DATE, Sundays, and declared public holidays (e.g. 26/08/2026)
   const allDates = Array.from(
-    new Set([...reports.map((r) => r.date), targetDate])
+    new Set([...reports.map((r) => normalizeDateToIso(r.date)), isoTarget])
   )
     .filter(
       (d) =>
+        Boolean(d) &&
         d >= SYSTEM_LAUNCH_DATE &&
         d !== '2026-07-29' &&
-        d <= targetDate &&
+        d <= isoTarget &&
         !isSunday(d) &&
-        !isHoliday(d)
+        !isHoliday(d) &&
+        d !== '2026-08-26'
     )
     .sort();
 
+  const targetOfficeNorm = officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+
   const submittedDates = new Set(
-    reports.filter((r) => r.officeName === officeName).map((r) => r.date)
+    reports
+      .filter((r) => {
+        if (!r || !r.officeName || !r.date) return false;
+        const norm = r.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+        if (norm !== targetOfficeNorm) return false;
+        // Don't count placeholder "NOT_SUBMITTED" or holiday entries as actual submissions
+        if (r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted')) {
+          return false;
+        }
+        return true;
+      })
+      .map((r) => normalizeDateToIso(r.date))
   );
 
-  return allDates.filter((d) => !submittedDates.has(d));
+  return allDates.filter(
+    (d) => !submittedDates.has(d) && !isSunday(d) && !isHoliday(d) && d !== '2026-08-26'
+  );
 }
 
 /**

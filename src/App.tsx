@@ -13,6 +13,7 @@ import {
   getTodayDateString,
   isInvalidPostOfficeName,
   isSunday,
+  isHoliday,
   SYSTEM_LAUNCH_DATE,
 } from './utils/calculations';
 import {
@@ -26,6 +27,7 @@ import {
   deleteDailyReportFromCloud,
   saveAppConfigToCloud,
   subscribeToAppConfig,
+  subscribeToHolidays,
 } from './services/cloudDatabase';
 import { Header } from './components/Header';
 import { Sidebar, NavTab } from './components/Sidebar';
@@ -34,6 +36,7 @@ import { DailyReportForm } from './components/DailyReportForm';
 import { ReportsList } from './components/ReportsList';
 import { PostOfficesManager } from './components/PostOfficesManager';
 import { PendingReports } from './components/PendingReports';
+import { HolidayManager } from './components/HolidayManager';
 import { PdfExportView } from './components/PdfExportView';
 import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
 import { UserManagement } from './components/UserManagement';
@@ -204,10 +207,16 @@ export default function App() {
       if (cfg.triggerConfig) setTriggerConfig(cfg.triggerConfig);
     });
 
+    const unsubHolidays = subscribeToHolidays(() => {
+      setReports((prev) => [...cleanAndFilterReports(prev)]);
+      setLastRefreshedAt(new Date());
+    });
+
     return () => {
       unsubOffices();
       unsubReports();
       unsubConfig();
+      unsubHolidays();
     };
   }, []);
 
@@ -467,8 +476,12 @@ export default function App() {
   const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
   const todaySubmittedSet = new Set(reports.filter((r) => r.date === today).map((r) => r.officeName));
   const isTodaySunday = isSunday(today);
+  const isTodayHoliday = isHoliday(today);
   const isTodayPreLaunch = today < SYSTEM_LAUNCH_DATE || today === '2026-07-29';
-  const pendingCountToday = isTodaySunday || isTodayPreLaunch ? 0 : activeOffices.filter((po) => !todaySubmittedSet.has(po.name)).length;
+  const pendingCountToday =
+    isTodaySunday || isTodayHoliday || isTodayPreLaunch
+      ? 0
+      : activeOffices.filter((po) => !todaySubmittedSet.has(po.name)).length;
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-slate-800 font-sans flex flex-col">
@@ -560,6 +573,19 @@ export default function App() {
               onNavigateExplanation={(officeName) => {
                 setActiveTab('issue-explanation');
               }}
+            />
+          )}
+
+          {activeTab === 'holidays' && (
+            <HolidayManager
+              onNavigateDate={(d) => {
+                setSelectedDate(d);
+                setActiveTab('pending-reports');
+              }}
+              onHolidayUpdated={() => {
+                setReports((prev) => [...cleanAndFilterReports(prev)]);
+              }}
+              currentUsername={currentUser ? currentUser.username : 'Admin'}
             />
           )}
 

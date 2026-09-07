@@ -67,6 +67,14 @@ export interface TriggerConfig {
   lastRolloverRun?: string;
 }
 
+export interface OfficialHoliday {
+  date: string; // YYYY-MM-DD
+  title: string; // e.g. "Official Public Holiday (26/08/2026)"
+  declaredBy?: string;
+  declaredAt?: string;
+  notes?: string;
+}
+
 export interface GasModule {
   filename: string;
   language: string;

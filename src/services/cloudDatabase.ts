@@ -8,8 +8,8 @@ import {
   getDocs,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { PostOffice, DailyReport, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig } from '../types';
-import { cleanAndFilterPostOffices, cleanAndFilterReports, SYSTEM_LAUNCH_DATE } from '../utils/calculations';
+import { PostOffice, DailyReport, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig, OfficialHoliday } from '../types';
+import { cleanAndFilterPostOffices, cleanAndFilterReports, SYSTEM_LAUNCH_DATE, setInMemoryHolidays } from '../utils/calculations';
 
 const POST_OFFICES_COL = 'postOffices';
 const DAILY_REPORTS_COL = 'dailyReports';
@@ -304,4 +304,96 @@ export function subscribeToAppConfig(
       console.warn('AppConfig listener error:', error);
     }
   );
+}
+
+/**
+ * Save declared Public Holidays map to Cloud Firestore
+ */
+export async function saveHolidaysToCloud(
+  holidays: Record<string, OfficialHoliday | string>
+): Promise<void> {
+  const docRef = doc(db, APP_CONFIG_COL, 'holidays_registry');
+  try {
+    const payload: Record<string, any> = {};
+    for (const [k, v] of Object.entries(holidays)) {
+      if (typeof v === 'string') {
+        payload[k] = {
+          date: k,
+          title: v,
+          declaredBy: 'Divisional Administration',
+          declaredAt: new Date().toISOString(),
+        };
+      } else if (v && typeof v === 'object') {
+        payload[k] = { ...v };
+      }
+    }
+    // Always guarantee 2026-08-26 is included
+    if (!payload['2026-08-26']) {
+      payload['2026-08-26'] = {
+        date: '2026-08-26',
+        title: 'Official Public Holiday (26/08/2026)',
+        declaredBy: 'Government Gazette Notification',
+        declaredAt: '2026-08-25T18:00:00.000Z',
+        notes: 'Gazetted Public Holiday - Excluded from all pendency',
+      };
+    }
+
+    await setDoc(
+      docRef,
+      {
+        holidays: payload,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    setInMemoryHolidays(payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${APP_CONFIG_COL}/holidays_registry`);
+  }
+}
+
+/**
+ * Realtime subscription to declared Public Holidays across all connected clients
+ */
+export function subscribeToHolidays(
+  onUpdate: (holidays: Record<string, OfficialHoliday>) => void,
+  onError?: (err: any) => void
+) {
+  const docRef = doc(db, APP_CONFIG_COL, 'holidays_registry');
+  return onSnapshot(
+    docRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const holidaysMap = (data && data.holidays) || {};
+        setInMemoryHolidays(holidaysMap);
+        onUpdate(holidaysMap);
+      }
+    },
+    (error) => {
+      console.warn('Realtime Holidays listener error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Fetch declared Public Holidays from Cloud Firestore
+ */
+export async function fetchHolidaysFromCloud(): Promise<Record<string, OfficialHoliday>> {
+  const docRef = doc(db, APP_CONFIG_COL, 'holidays_registry');
+  try {
+    const snap = await getDocs(collection(db, APP_CONFIG_COL));
+    for (const d of snap.docs) {
+      if (d.id === 'holidays_registry') {
+        const data = d.data();
+        const map = (data && data.holidays) || {};
+        setInMemoryHolidays(map);
+        return map;
+      }
+    }
+  } catch (e) {
+    console.warn('Fetch holidays error:', e);
+  }
+  return {};
 }
