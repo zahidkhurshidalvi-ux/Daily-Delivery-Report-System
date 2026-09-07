@@ -7,6 +7,9 @@ import {
   cleanAndFilterPostOffices,
   cleanAndFilterReports,
   isSunday,
+  isHoliday,
+  getHolidayReason,
+  isClosedOrHoliday,
   getDayOfWeek,
   SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
@@ -84,6 +87,9 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   const [filterMode, setFilterMode] = useState<'ALL_PENDING' | 'MULTI_DATE_ONLY'>('ALL_PENDING');
 
   const isSelectedDateSunday = isSunday(selectedDate);
+  const isSelectedDateHoliday = isHoliday(selectedDate);
+  const holidayReason = getHolidayReason(selectedDate);
+  const isClosedDay = isSelectedDateSunday || isSelectedDateHoliday;
   const isPreLaunchDate = selectedDate < SYSTEM_LAUNCH_DATE || selectedDate === '2026-07-29';
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
   const dateReports = validReports.filter((r) => r.date === selectedDate);
@@ -98,7 +104,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
             .sort((a, b) => (a.date > b.date ? -1 : 1));
 
           const missingDates = getMissingDatesForOffice(office.name, selectedDate, validReports);
-          const isMissingToday = !isSelectedDateSunday && !submittedOfficeNames.has(office.name);
+          const isMissingToday = !isClosedDay && !submittedOfficeNames.has(office.name);
 
           return {
             office,
@@ -107,7 +113,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
             isMissingToday,
           };
         })
-        .filter((item) => (isSelectedDateSunday ? item.missingDates.length > 0 : item.isMissingToday || item.missingDates.length > 0))
+        .filter((item) => (isClosedDay ? item.missingDates.length > 0 : item.isMissingToday || item.missingDates.length > 0))
         .sort((a, b) => a.office.name.localeCompare(b.office.name, undefined, { sensitivity: 'base', numeric: true }));
 
   // Filter based on search & view mode
@@ -352,6 +358,12 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                   <span>Sunday Holiday</span>
                 </span>
               )}
+              {isSelectedDateHoliday && (
+                <span className="bg-purple-100 text-purple-800 border border-purple-300 text-[10px] px-2 py-0.5 rounded font-bold flex items-center space-x-1">
+                  <Calendar className="w-3 h-3 text-purple-600" />
+                  <span>{holidayReason || 'Public Holiday'} (Closed)</span>
+                </span>
+              )}
             </div>
           )}
 
@@ -417,17 +429,31 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
         <div className="bg-white border border-emerald-200 bg-emerald-50/20 p-3.5 rounded-lg shadow-xs">
           <p className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Submitted Today</p>
           <div className="flex items-center justify-between mt-1">
-            <span className="text-2xl font-black text-[#006633]">{activeOffices.length - pendingList.length}</span>
+            <span className="text-2xl font-black text-[#006633]">
+              {isClosedDay ? activeOffices.length : Math.max(0, activeOffices.length - pendingList.filter((p) => p.isMissingToday).length)}
+            </span>
             <CheckCircle2 className="w-5 h-5 text-[#006633]" />
           </div>
+          {isClosedDay && (
+            <p className="text-[10px] text-emerald-700 font-semibold mt-1">
+              All auto-cleared (Holiday/Closed)
+            </p>
+          )}
         </div>
 
         <div className="bg-white border border-red-200 bg-red-50/20 p-3.5 rounded-lg shadow-xs">
           <p className="text-[10px] text-red-800 font-bold uppercase tracking-wider">Pending Offices Today</p>
           <div className="flex items-center justify-between mt-1">
-            <span className="text-2xl font-black text-red-600">{pendingList.length}</span>
+            <span className="text-2xl font-black text-red-600">
+              {isClosedDay ? 0 : pendingList.filter((p) => p.isMissingToday).length}
+            </span>
             <Clock className="w-5 h-5 text-red-600" />
           </div>
+          {isClosedDay && (
+            <p className="text-[10px] text-purple-700 font-semibold mt-1">
+              {isSelectedDateHoliday ? (holidayReason || 'Public Holiday') : 'Sunday Closed'}
+            </p>
+          )}
         </div>
 
         <div className="bg-white border border-amber-200 bg-amber-50/20 p-3.5 rounded-lg shadow-xs">
@@ -449,6 +475,22 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
               The daily delivery reporting system was officially launched and operationalized on <strong>17/08/2026</strong>. 
               Pendency tracking and missing reports are only applicable from <strong>17/08/2026 onwards</strong>. 
               No missing reports or pendency exist for dates prior to 17/08/2026 (including 29/07/2026).
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Public Holiday Date Notice */}
+      {isSelectedDateHoliday && (
+        <div className="bg-purple-50 border border-purple-200 text-purple-900 p-4 rounded-lg flex items-start space-x-3 text-xs shadow-xs">
+          <Calendar className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-sm">سرکاری چھٹی — {holidayReason || 'Official Public Holiday'}</p>
+            <p className="mt-1 text-purple-800 leading-relaxed">
+              <strong>{formatDatePK(selectedDate)}</strong> is an official declared public holiday. Daily delivery reporting and pendency are completely waived for this date.
+              {pendingList.length > 0
+                ? ' The pending offices listed below are exclusively due to missing submissions from earlier working dates.'
+                : ' There is zero pendency for this holiday.'}
             </p>
           </div>
         </div>

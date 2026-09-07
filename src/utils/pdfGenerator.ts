@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 
 import { DailyReport, PostOffice } from '../types';
-import { formatDatePK, formatNumber, summarizeReports, isSunday, getDayOfWeek } from './calculations';
+import { formatDatePK, formatNumber, summarizeReports, isSunday, isHoliday, getHolidayReason, getDayOfWeek } from './calculations';
 
 export function generateDailyReportPDF(
   reports: DailyReport[],
@@ -22,6 +22,8 @@ export function generateDailyReportPDF(
       : '0.0';
 
   const isSun = isSunday(reportDate);
+  const isHol = isHoliday(reportDate);
+  const holReason = getHolidayReason(reportDate);
 
   // Header Colors: Dark Green #00401A / #006633, Gold Accent #D4AF37 (A4 Portrait width: 210mm)
   doc.setFillColor(0, 64, 26); // Pakistan Post Dark Green
@@ -50,7 +52,7 @@ export function generateDailyReportPDF(
   doc.setFontSize(8.5);
   const dateLabel = reportDate.includes('TO') || reportDate.includes('FROM')
     ? reportDate
-    : `DATE: ${formatDatePK(reportDate)}${isSun ? ' (SUNDAY HOLIDAY)' : ''}`;
+    : `DATE: ${formatDatePK(reportDate)}${isHol ? ` (HOLIDAY)` : isSun ? ' (SUNDAY HOLIDAY)' : ''}`;
   doc.text(dateLabel, 200, 13, { align: 'right' });
 
   // Summary Banner Card (Portrait 190mm wide)
@@ -135,8 +137,11 @@ export function generateDailyReportPDF(
     }
 
     const rowIsSun = isSunday(rep.date) || isSun;
+    const rowIsHol = isHoliday(rep.date) || isHol;
+    const rowHolReason = getHolidayReason(rep.date) || holReason;
     const isNotSubmitted =
       !rowIsSun &&
+      !rowIsHol &&
       (rep.submittedBy === 'NOT_SUBMITTED' ||
       rep.remarks?.includes('Report not submitted'));
 
@@ -146,7 +151,10 @@ export function generateDailyReportPDF(
         : '0%';
 
     // Row background
-    if (rowIsSun) {
+    if (rowIsHol) {
+      doc.setFillColor(243, 232, 255); // light purple for holiday
+      doc.rect(10, currentY, 190, 5.5, 'F');
+    } else if (rowIsSun) {
       doc.setFillColor(254, 249, 195); // light yellow for Sunday
       doc.rect(10, currentY, 190, 5.5, 'F');
     } else if (isNotSubmitted) {
@@ -162,7 +170,9 @@ export function generateDailyReportPDF(
     doc.line(10, currentY + 5.5, 200, currentY + 5.5);
 
     let xPos = 10;
-    const displayRemarks = rowIsSun
+    const displayRemarks = rowIsHol
+      ? (rowHolReason ? (rowHolReason.length > 20 ? rowHolReason.substring(0, 18) + '..' : rowHolReason) : 'Public Holiday')
+      : rowIsSun
       ? 'Sunday Holiday'
       : isNotSubmitted
       ? 'Pending (Not submitted)'
@@ -409,8 +419,11 @@ export function generateAllDatesReportPDF(
     }
 
     const isSun = isSunday(rep.date);
+    const isHol = isHoliday(rep.date);
+    const rowHolReason = getHolidayReason(rep.date);
     const isNotSubmitted =
       !isSun &&
+      !isHol &&
       (rep.submittedBy === 'NOT_SUBMITTED' ||
       rep.remarks?.includes('Report not submitted'));
 
@@ -419,7 +432,10 @@ export function generateAllDatesReportPDF(
         ? `${((rep.delivered / rep.receivedToday) * 100).toFixed(0)}%`
         : '0%';
 
-    if (isSun) {
+    if (isHol) {
+      doc.setFillColor(243, 232, 255); // light purple for holiday
+      doc.rect(10, currentY, 190, 5.5, 'F');
+    } else if (isSun) {
       doc.setFillColor(254, 249, 195); // light yellow for Sunday
       doc.rect(10, currentY, 190, 5.5, 'F');
     } else if (isNotSubmitted) {
@@ -434,7 +450,9 @@ export function generateAllDatesReportPDF(
     doc.line(10, currentY + 5.5, 200, currentY + 5.5);
 
     let xPos = 10;
-    const displayRemarks = isSun
+    const displayRemarks = isHol
+      ? (rowHolReason ? (rowHolReason.length > 22 ? rowHolReason.substring(0, 20) + '..' : rowHolReason) : 'Public Holiday')
+      : isSun
       ? 'Sunday Holiday'
       : isNotSubmitted
       ? 'Pending (Not submitted)'
@@ -1380,6 +1398,7 @@ export function triggerPrintableAllDatesWindow(
             text-transform: uppercase;
           }
           th.num, td.num { text-align: right; }
+          tr.holiday-row { background-color: #f3e8ff; }
           tr.sunday-row { background-color: #fef9c3; }
           tr.missing-row { background-color: #fee2e2; }
           .grand-total td { 
@@ -1456,8 +1475,11 @@ export function triggerPrintableAllDatesWindow(
             ${sortedReports
               .map((r, idx) => {
                 const isSun = isSunday(r.date);
+                const isHol = isHoliday(r.date);
+                const rowHolReason = getHolidayReason(r.date);
                 const isNotSubmitted =
                   !isSun &&
+                  !isHol &&
                   (r.submittedBy === 'NOT_SUBMITTED' ||
                   r.remarks?.includes('Report not submitted'));
 
@@ -1466,13 +1488,15 @@ export function triggerPrintableAllDatesWindow(
                     ? `${((r.delivered / r.receivedToday) * 100).toFixed(0)}%`
                     : '0%';
 
-                const displayRemarks = isSun
+                const displayRemarks = isHol
+                  ? `<strong style="color:#6b21a8;">${rowHolReason || 'Public Holiday'} (Closed)</strong>`
+                  : isSun
                   ? '<strong style="color:#b45309;">Sunday Holiday</strong>'
                   : isNotSubmitted
                   ? '<strong style="color:#b91c1c;">Pending</strong>'
                   : r.remarks || '-';
 
-                const rowClass = isSun ? 'class="sunday-row"' : isNotSubmitted ? 'class="missing-row"' : '';
+                const rowClass = isHol ? 'class="holiday-row"' : isSun ? 'class="sunday-row"' : isNotSubmitted ? 'class="missing-row"' : '';
 
                 return `
               <tr ${rowClass}>

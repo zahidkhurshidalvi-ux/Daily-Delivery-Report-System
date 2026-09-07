@@ -12,6 +12,8 @@ import {
   getCompleteDateReports,
   getTodayDateString,
   isSunday,
+  isHoliday,
+  getHolidayReason,
   SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import {
@@ -40,6 +42,8 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
   const [divisionName, setDivisionName] = useState('Gujranwala Division');
 
   const isSelectedDateSunday = isSunday(selectedDate);
+  const isSelectedDateHoliday = isHoliday(selectedDate);
+  const holidayReason = getHolidayReason(selectedDate);
 
   // Single date reports (with Sunday Holiday or Missing automatically filled with balance carry forward)
   const dateReports = getCompleteDateReports(reports, postOffices, selectedDate);
@@ -103,6 +107,12 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
               <span>Sunday Holiday</span>
             </span>
           )}
+          {isSelectedDateHoliday && (
+            <span className="bg-purple-100 text-purple-800 border border-purple-300 text-[10px] px-2 py-1 rounded font-bold flex items-center space-x-1">
+              <Calendar className="w-3 h-3 text-purple-600" />
+              <span>{holidayReason || 'Public Holiday'} (Closed)</span>
+            </span>
+          )}
 
           <button
             onClick={handleDownloadPDF}
@@ -138,6 +148,19 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
             <strong className="font-bold">اتوار کی سرکاری چھٹی (Sunday Official Holiday)</strong>
             <p className="mt-0.5 text-amber-800">
               Sunday is a weekly closed holiday. No deliveries or pending status are enforced. All offices are designated with "Sunday Holiday (Weekly Closed)".
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Holiday Notification Banner if viewing a declared public holiday */}
+      {isSelectedDateHoliday && (
+        <div className="bg-purple-50 border border-purple-300 rounded-lg p-3 text-purple-900 flex items-center space-x-3 text-xs">
+          <Calendar className="w-5 h-5 text-purple-600 shrink-0" />
+          <div>
+            <strong className="font-bold">سرکاری تعطیل ({holidayReason || 'Official Public Holiday'})</strong>
+            <p className="mt-0.5 text-purple-800">
+              This date is declared an official public holiday. Delivery targets and pendency are completely waived. All offices are automatically carried forward with holiday closed status.
             </p>
           </div>
         </div>
@@ -239,8 +262,11 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                 <tbody className="divide-y divide-slate-200">
                   {dateReports.map((r, idx) => {
                     const rowIsSun = isSelectedDateSunday || isSunday(r.date);
+                    const rowIsHol = isSelectedDateHoliday || isHoliday(r.date);
+                    const rowHolReason = getHolidayReason(r.date);
                     const isMissing =
                       !rowIsSun &&
+                      !rowIsHol &&
                       (r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted'));
 
                     const rowRate =
@@ -252,7 +278,9 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                       <tr
                         key={r.id ? `${r.id}_${r.officeName}_${idx}` : `pdf-rep-${idx}`}
                         className={
-                          rowIsSun
+                          rowIsHol
+                            ? 'bg-purple-50/60'
+                            : rowIsSun
                             ? 'bg-amber-50/50'
                             : isMissing
                             ? 'bg-red-50/70'
@@ -287,7 +315,11 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
                           {formatNumber(r.deposit)}
                         </td>
                         <td className="p-2 border border-slate-200 font-medium">
-                          {rowIsSun ? (
+                          {rowIsHol ? (
+                            <span className="text-purple-800 font-bold bg-purple-100 px-1.5 py-0.5 rounded text-[10px]">
+                              {rowHolReason || 'Public Holiday'} (Closed)
+                            </span>
+                          ) : rowIsSun ? (
                             <span className="text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded text-[10px]">
                               Sunday Holiday (Weekly Closed)
                             </span>

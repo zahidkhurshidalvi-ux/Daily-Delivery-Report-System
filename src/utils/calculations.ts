@@ -396,6 +396,104 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
 export const SYSTEM_LAUNCH_DATE = '2026-08-17'; // Official system launch date (17-08-2026)
 
 /**
+ * Official declared public holidays.
+ * Excluded from missing reports, pendency, explanation notices, and delinquent calculations.
+ * Key: YYYY-MM-DD, Value: Holiday title/description
+ */
+export const DEFAULT_OFFICIAL_HOLIDAYS: Record<string, string> = {
+  '2026-08-26': 'Official Public Holiday (26/08/2026)',
+};
+
+/**
+ * Normalizes various date formats (YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY) into standard ISO YYYY-MM-DD.
+ */
+export function normalizeDateToIso(dateStr: string): string {
+  if (!dateStr) return '';
+  const clean = String(dateStr).trim().split('T')[0].split(' ')[0];
+  if (clean.includes('-')) {
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      } else if (parts[2].length === 4) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+  }
+  if (clean.includes('/')) {
+    const parts = clean.split('/');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      } else if (parts[2].length === 4) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+  }
+  return clean;
+}
+
+/**
+ * Retrieves configured public holidays (default + custom stored in localStorage).
+ */
+export function getCustomHolidays(): Record<string, string> {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const saved = localStorage.getItem('pakpost_holidays');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { ...DEFAULT_OFFICIAL_HOLIDAYS, ...parsed };
+      }
+    } catch (e) {
+      // ignore JSON parse error
+    }
+  }
+  return { ...DEFAULT_OFFICIAL_HOLIDAYS };
+}
+
+/**
+ * Checks if a date is a declared public holiday (e.g. 2026-08-26).
+ */
+export function isHoliday(dateStr: string): boolean {
+  if (!dateStr) return false;
+  const iso = normalizeDateToIso(dateStr);
+  const holidays = getCustomHolidays();
+  return Boolean(holidays[iso]);
+}
+
+/**
+ * Returns holiday reason/description or null if not a holiday.
+ */
+export function getHolidayReason(dateStr: string): string | null {
+  if (!dateStr) return null;
+  const iso = normalizeDateToIso(dateStr);
+  const holidays = getCustomHolidays();
+  return holidays[iso] || null;
+}
+
+/**
+ * Checks if a date is either a Sunday or an official declared public holiday.
+ */
+export function isClosedOrHoliday(dateStr: string): boolean {
+  return isSunday(dateStr) || isHoliday(dateStr);
+}
+
+/**
+ * Adds or updates a holiday in custom holidays storage.
+ */
+export function saveCustomHoliday(dateStr: string, reason: string): void {
+  const iso = normalizeDateToIso(dateStr);
+  if (!iso) return;
+  try {
+    const current = getCustomHolidays();
+    current[iso] = reason || 'Public Holiday';
+    localStorage.setItem('pakpost_holidays', JSON.stringify(current));
+  } catch (e) {
+    // ignore
+  }
+}
+
+/**
  * Filters and sanitizes DailyReports, removing any rows where officeName or date is a header title.
  * Also ensures numeric fields never hold phone numbers.
  * Excludes legacy/test records prior to official launch date 17-08-2026 (specifically 29/07/2026).
@@ -510,6 +608,8 @@ export function getCompleteDateReports(
   }
 
   const isSundayDate = isSunday(targetDate);
+  const isHolidayDate = isHoliday(targetDate);
+  const holidayReason = getHolidayReason(targetDate);
   const dateReports = validReports.filter((r) => r.date === targetDate);
   const submittedOfficeKeys = new Set(
     dateReports.map((r) => r.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, ''))
@@ -566,6 +666,25 @@ export function getCompleteDateReports(
           remarks: 'Sunday Holiday (Weekly Closed)',
           submittedBy: 'SUNDAY_HOLIDAY',
           submittedAt: 'Sunday Holiday',
+        };
+      }
+
+      if (isHolidayDate) {
+        return {
+          id: `holiday_${safeOfficeId}_${targetDate}`,
+          date: targetDate,
+          officeName: office.name,
+          postmasterName: office.postmasterName || '',
+          lastBalance: carriedBal,
+          receivedToday: 0,
+          delivered: 0,
+          returnedToSender: 0,
+          missent: 0,
+          deposit: carriedBal,
+          closingBalance: carriedBal,
+          remarks: holidayReason ? `${holidayReason} (Closed)` : 'Official Public Holiday (Closed)',
+          submittedBy: 'PUBLIC_HOLIDAY',
+          submittedAt: holidayReason || 'Public Holiday',
         };
       }
 
@@ -675,7 +794,7 @@ export function getMissingDatesForOffice(
   }
 
   // Get all unique dates present in reports up to targetDate, strictly bounded by SYSTEM_LAUNCH_DATE
-  // Excludes 2026-07-29, any dates < SYSTEM_LAUNCH_DATE, and Sundays
+  // Excludes 2026-07-29, any dates < SYSTEM_LAUNCH_DATE, Sundays, and declared public holidays (e.g. 26/08/2026)
   const allDates = Array.from(
     new Set([...reports.map((r) => r.date), targetDate])
   )
@@ -684,7 +803,8 @@ export function getMissingDatesForOffice(
         d >= SYSTEM_LAUNCH_DATE &&
         d !== '2026-07-29' &&
         d <= targetDate &&
-        !isSunday(d)
+        !isSunday(d) &&
+        !isHoliday(d)
     )
     .sort();
 

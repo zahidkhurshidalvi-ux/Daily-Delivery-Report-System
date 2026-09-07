@@ -7,6 +7,8 @@ import {
   summarizeReports,
   getCompleteDateReports,
   isSunday,
+  isHoliday,
+  getHolidayReason,
   SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import {
@@ -59,7 +61,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const receivedCount = dateReports.length;
   const isPreLaunch = selectedDate < SYSTEM_LAUNCH_DATE || selectedDate === '2026-07-29';
   const isSun = isSunday(selectedDate);
-  const pendingCount = isPreLaunch || isSun ? 0 : Math.max(0, activeOffices.length - receivedCount);
+  const isHol = isHoliday(selectedDate);
+  const holidayReason = getHolidayReason(selectedDate);
+  const isClosedDay = isSun || isHol;
+  const pendingCount = isPreLaunch || isClosedDay ? 0 : Math.max(0, activeOffices.length - receivedCount);
 
   const totals = summarizeReports(dateReports);
 
@@ -123,6 +128,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 Today
               </button>
             )}
+            {isSun && (
+              <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-bold">
+                Sunday Closed
+              </span>
+            )}
+            {isHol && (
+              <span className="text-[10px] bg-purple-100 text-purple-800 border border-purple-300 px-2 py-0.5 rounded font-bold">
+                {holidayReason || 'Public Holiday'} (Closed)
+              </span>
+            )}
           </div>
 
           <button
@@ -133,6 +148,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Holiday Notification Banner */}
+      {isHol && (
+        <div className="bg-purple-50 border border-purple-200 text-purple-900 p-4 rounded-lg flex items-start space-x-3 text-xs shadow-xs">
+          <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold shrink-0">
+            ★
+          </div>
+          <div>
+            <p className="font-bold text-sm">سرکاری چھٹی — {holidayReason || 'Official Public Holiday'}</p>
+            <p className="mt-0.5 text-purple-800 leading-relaxed">
+              <strong>{formatDatePK(selectedDate)}</strong> is an official public holiday. Delivery reporting and pendency are completely waived. No offices are flagged as pending or delinquent for this date.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Primary Status Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -152,9 +182,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Reports Today</p>
-            <h3 className="text-2xl font-black text-[#006633]">{receivedCount}</h3>
+            <h3 className="text-2xl font-black text-[#006633]">
+              {isClosedDay ? activeOffices.length : receivedCount}
+            </h3>
             <p className="text-[10px] text-gray-500 mt-1">
-              {Math.round((receivedCount / activeOffices.length) * 100)}% Submitted
+              {isClosedDay ? '100% Cleared (Holiday/Closed)' : `${Math.round((receivedCount / activeOffices.length) * 100)}% Submitted`}
             </p>
           </div>
           <div className="w-10 h-10 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center justify-center text-emerald-700">
@@ -170,7 +202,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div>
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Pending Reports</p>
             <h3 className="text-2xl font-black text-red-600">{pendingCount}</h3>
-            <p className="text-[10px] text-red-500 mt-1 font-semibold">Click to Remind Pending</p>
+            <p className="text-[10px] text-red-500 mt-1 font-semibold">
+              {isHol ? (holidayReason || 'Public Holiday (Closed)') : isSun ? 'Sunday Closed' : 'Click to Remind Pending'}
+            </p>
           </div>
           <div className="w-10 h-10 bg-red-50 rounded-lg border border-red-200 flex items-center justify-center text-red-600">
             <Clock className="w-5 h-5" />

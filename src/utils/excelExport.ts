@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { DailyReport, PostOffice } from '../types';
-import { formatDatePK, summarizeReports, getDayOfWeek, isSunday } from './calculations';
+import { formatDatePK, summarizeReports, getDayOfWeek, isSunday, isHoliday, getHolidayReason } from './calculations';
 
 export function exportDailyReportsToExcel(reports: DailyReport[], filename: string = 'Pakistan_Post_Daily_Reports') {
   const totals = summarizeReports(reports);
@@ -16,8 +16,12 @@ export function exportDailyReportsToExcel(reports: DailyReport[], filename: stri
         : '0.0%';
 
     const isSun = isSunday(r.date);
+    const isHol = isHoliday(r.date);
+    const holReason = getHolidayReason(r.date);
     const dayName = getDayOfWeek(r.date);
-    const displayRemarks = isSun
+    const displayRemarks = isHol
+      ? `${holReason || 'Public Holiday'} (Official Closed)`
+      : isSun
       ? 'Sunday Holiday (Weekly Closed)'
       : (r.remarks || (r.submittedBy === 'NOT_SUBMITTED' ? 'Report not submitted till 5 PM' : 'N/A'));
 
@@ -89,8 +93,12 @@ export function exportAllDatesReportsToExcel(reports: DailyReport[], filename: s
         : '0.0%';
 
     const isSun = isSunday(r.date);
+    const isHol = isHoliday(r.date);
+    const holReason = getHolidayReason(r.date);
     const dayName = getDayOfWeek(r.date);
-    const displayRemarks = isSun
+    const displayRemarks = isHol
+      ? `${holReason || 'Public Holiday'} (Official Closed)`
+      : isSun
       ? 'Sunday Holiday (Weekly Closed)'
       : (r.remarks || (r.submittedBy === 'NOT_SUBMITTED' ? 'Report not submitted till 5 PM' : '-'));
 
