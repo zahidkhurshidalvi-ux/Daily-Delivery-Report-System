@@ -8,6 +8,7 @@ import {
   cleanAndFilterReports,
   isSunday,
   getDayOfWeek,
+  SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import {
   getUrduReminderTemplate,
@@ -83,28 +84,31 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   const [filterMode, setFilterMode] = useState<'ALL_PENDING' | 'MULTI_DATE_ONLY'>('ALL_PENDING');
 
   const isSelectedDateSunday = isSunday(selectedDate);
+  const isPreLaunchDate = selectedDate < SYSTEM_LAUNCH_DATE || selectedDate === '2026-07-29';
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
   const dateReports = validReports.filter((r) => r.date === selectedDate);
   const submittedOfficeNames = new Set(dateReports.map((r) => r.officeName));
 
-  const pendingList = activeOffices
-    .map((office) => {
-      const pastReports = validReports
-        .filter((r) => r.officeName === office.name)
-        .sort((a, b) => (a.date > b.date ? -1 : 1));
+  const pendingList = isPreLaunchDate
+    ? []
+    : activeOffices
+        .map((office) => {
+          const pastReports = validReports
+            .filter((r) => r.officeName === office.name)
+            .sort((a, b) => (a.date > b.date ? -1 : 1));
 
-      const missingDates = getMissingDatesForOffice(office.name, selectedDate, validReports);
-      const isMissingToday = !isSelectedDateSunday && !submittedOfficeNames.has(office.name);
+          const missingDates = getMissingDatesForOffice(office.name, selectedDate, validReports);
+          const isMissingToday = !isSelectedDateSunday && !submittedOfficeNames.has(office.name);
 
-      return {
-        office,
-        lastReportDate: pastReports.length > 0 ? pastReports[0].date : undefined,
-        missingDates,
-        isMissingToday,
-      };
-    })
-    .filter((item) => (isSelectedDateSunday ? item.missingDates.length > 0 : item.isMissingToday || item.missingDates.length > 0))
-    .sort((a, b) => a.office.name.localeCompare(b.office.name, undefined, { sensitivity: 'base', numeric: true }));
+          return {
+            office,
+            lastReportDate: pastReports.length > 0 ? pastReports[0].date : undefined,
+            missingDates,
+            isMissingToday,
+          };
+        })
+        .filter((item) => (isSelectedDateSunday ? item.missingDates.length > 0 : item.isMissingToday || item.missingDates.length > 0))
+        .sort((a, b) => a.office.name.localeCompare(b.office.name, undefined, { sensitivity: 'base', numeric: true }));
 
   // Filter based on search & view mode
   const filteredPendingList = pendingList.filter((item) => {
@@ -323,6 +327,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
               <input
                 type="date"
                 value={selectedDate}
+                min={SYSTEM_LAUNCH_DATE}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="bg-white text-gray-800 text-xs px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#006633] font-medium"
               />
@@ -335,6 +340,11 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                 >
                   Today
                 </button>
+              )}
+              {isPreLaunchDate && (
+                <span className="bg-blue-100 text-blue-900 border border-blue-300 text-[10px] px-2 py-0.5 rounded font-bold flex items-center space-x-1">
+                  <span>Pre-Launch Date (Official Launch: 17/08/2026)</span>
+                </span>
               )}
               {isSelectedDateSunday && (
                 <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] px-2 py-0.5 rounded font-bold flex items-center space-x-1">
@@ -428,6 +438,21 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Pre-launch Date Notice */}
+      {isPreLaunchDate && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-900 p-4 rounded-lg flex items-start space-x-3 text-xs shadow-xs">
+          <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-sm">System Launch Date: 17/08/2026</p>
+            <p className="mt-1 text-gray-700 leading-relaxed">
+              The daily delivery reporting system was officially launched and operationalized on <strong>17/08/2026</strong>. 
+              Pendency tracking and missing reports are only applicable from <strong>17/08/2026 onwards</strong>. 
+              No missing reports or pendency exist for dates prior to 17/08/2026 (including 29/07/2026).
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Search & Filter Bar */}
       <div className="bg-white border border-gray-200 p-3.5 rounded-lg shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -531,7 +556,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                   );
 
                   return (
-                    <tr key={item.office.id} className="hover:bg-red-50/30 transition-colors">
+                    <tr key={item.office.id ? `${item.office.id}_${item.office.name}` : `pending-po-${idx}`} className="hover:bg-red-50/30 transition-colors">
                       <td className="p-3 text-gray-400 font-mono font-bold">{idx + 1}</td>
                       <td className="p-3 font-extrabold text-gray-900">
                         <div className="flex items-center space-x-2">

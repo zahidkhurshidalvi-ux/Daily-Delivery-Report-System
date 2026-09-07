@@ -6,6 +6,8 @@ import {
   getTodayDateString,
   summarizeReports,
   getCompleteDateReports,
+  isSunday,
+  SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import {
   Building2,
@@ -55,7 +57,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const dateReports = reports.filter((r) => r.date === selectedDate);
   const allDateReports = getCompleteDateReports(reports, postOffices, selectedDate);
   const receivedCount = dateReports.length;
-  const pendingCount = activeOffices.length - receivedCount;
+  const isPreLaunch = selectedDate < SYSTEM_LAUNCH_DATE || selectedDate === '2026-07-29';
+  const isSun = isSunday(selectedDate);
+  const pendingCount = isPreLaunch || isSun ? 0 : Math.max(0, activeOffices.length - receivedCount);
 
   const totals = summarizeReports(dateReports);
 
@@ -349,10 +353,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
-                {allDateReports.map((r) => {
+                {allDateReports.map((r, idx) => {
                   const isMissing = r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted');
                   return (
-                    <tr key={r.id} className={isMissing ? 'bg-red-50/50 hover:bg-red-50/80 transition-colors' : 'hover:bg-gray-50/80 transition-colors'}>
+                    <tr key={r.id ? `${r.id}_${r.officeName}_${r.date}` : `dash-row-${r.officeName}-${idx}`} className={isMissing ? 'bg-red-50/50 hover:bg-red-50/80 transition-colors' : 'hover:bg-gray-50/80 transition-colors'}>
                       <td className="p-2.5 font-bold text-gray-900">{r.officeName}</td>
                       <td className="p-2.5 text-right text-gray-600">{formatNumber(r.lastBalance)}</td>
                       <td className="p-2.5 text-right font-bold text-[#006633]">

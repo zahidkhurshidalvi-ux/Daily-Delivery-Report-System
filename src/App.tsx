@@ -12,6 +12,8 @@ import {
   cleanAndFilterReports,
   getTodayDateString,
   isInvalidPostOfficeName,
+  isSunday,
+  SYSTEM_LAUNCH_DATE,
 } from './utils/calculations';
 import {
   subscribeToPostOffices,
@@ -45,18 +47,23 @@ function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[
 
   current.forEach((po) => {
     if (po && po.name) {
-      officeMap.set(po.name.toLowerCase().trim(), { ...po });
+      const key = po.name.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (key) {
+        officeMap.set(key, { ...po });
+      }
     }
   });
 
   incoming.forEach((inc) => {
     if (!inc || !inc.name) return;
-    const key = inc.name.toLowerCase().trim();
+    const key = inc.name.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    if (!key) return;
     const existing = officeMap.get(key);
     if (existing) {
       officeMap.set(key, {
         ...existing,
         ...inc,
+        id: existing.id || inc.id,
         // Preserve mobile number if incoming is empty but existing has one
         mobileNumber: (inc.mobileNumber && inc.mobileNumber.trim()) || existing.mobileNumber || '',
         postmasterName: (inc.postmasterName && inc.postmasterName.trim()) || existing.postmasterName || 'Postmaster',
@@ -68,7 +75,7 @@ function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[
     }
   });
 
-  return Array.from(officeMap.values());
+  return cleanAndFilterPostOffices(Array.from(officeMap.values()));
 }
 
 export default function App() {
@@ -459,7 +466,9 @@ export default function App() {
   // Calculate pending office count for today
   const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
   const todaySubmittedSet = new Set(reports.filter((r) => r.date === today).map((r) => r.officeName));
-  const pendingCountToday = activeOffices.filter((po) => !todaySubmittedSet.has(po.name)).length;
+  const isTodaySunday = isSunday(today);
+  const isTodayPreLaunch = today < SYSTEM_LAUNCH_DATE || today === '2026-07-29';
+  const pendingCountToday = isTodaySunday || isTodayPreLaunch ? 0 : activeOffices.filter((po) => !todaySubmittedSet.has(po.name)).length;
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-slate-800 font-sans flex flex-col">

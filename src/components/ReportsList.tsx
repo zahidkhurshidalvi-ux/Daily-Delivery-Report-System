@@ -710,7 +710,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
-                {sortedReports.map((report) => {
+                {sortedReports.map((report, idx) => {
                   const canEdit =
                     isAdmin ||
                     report.date === today;
@@ -721,7 +721,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                       : '0.0';
 
                   return (
-                    <tr key={report.id} className="hover:bg-gray-50/80 transition-colors">
+                    <tr key={report.id ? `${report.id}_${report.officeName}_${report.date}` : `rep-${report.officeName}-${idx}`} className="hover:bg-gray-50/80 transition-colors">
                       <td className="p-2.5 font-bold text-[#006633] whitespace-nowrap font-mono">
                         {formatDatePK(report.date)}
                       </td>

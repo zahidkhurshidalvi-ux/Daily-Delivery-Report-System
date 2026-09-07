@@ -283,15 +283,17 @@ export function isInvalidPostOfficeName(rawName: any): boolean {
 /**
  * Filters and sanitizes a list of PostOffices, removing any header rows, duplicates, or empty entries.
  * Ensures phone numbers are NEVER stored as initial balances.
+ * Strictly enforces unique IDs and unique office names across the entire directory.
  */
 export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
   if (!Array.isArray(offices)) return [];
-  const seen = new Set<string>();
+  const seenNames = new Set<string>();
+  const seenIds = new Set<string>();
   const cleaned: PostOffice[] = [];
 
   for (const po of offices) {
     if (!po || !po.name) continue;
-    const trimmedName = String(po.name).trim();
+    const trimmedName = String(po.name).replace(/\s+/g, ' ').trim();
     if (isInvalidPostOfficeName(trimmedName)) continue;
 
     let pm = String(po.postmasterName || '').trim();
@@ -299,7 +301,6 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
     let initBal = Number(po.initialBalance) || 0;
 
     // 1. Sanitize Mobile & Initial Balance:
-    // If initialBalance contains a mobile phone number (e.g. >= 10000 or 7+ digits)
     if (initBal >= 10000 || String(po.initialBalance || '').length >= 7) {
       const potentialPhone = String(po.initialBalance).trim();
       if (!mob || mob === '03001234567' || mob === '03000000000' || isInvalidPostOfficeName(mob)) {
@@ -339,19 +340,52 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
       mob = '03001234567';
     }
 
-    const key = trimmedName.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      cleaned.push({
-        ...po,
-        id: po.id || `po-${Date.now()}-${cleaned.length + 1}`,
-        name: trimmedName,
-        postmasterName: pm,
-        mobileNumber: mob,
-        status: po.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
-        initialBalance: initBal >= 0 && initBal < 10000 ? initBal : 0,
-      });
+    // Deduplicate by normalized office name (ignoring dots, spaces, case)
+    const nameKey = trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!nameKey) continue;
+
+    if (seenNames.has(nameKey)) {
+      // If already added, update existing office if incoming has better details
+      const existing = cleaned.find(
+        (o) => o.name.toLowerCase().replace(/[^a-z0-9]/g, '') === nameKey
+      );
+      if (existing) {
+        if ((!existing.mobileNumber || existing.mobileNumber === '03001234567') && mob && mob !== '03001234567') {
+          existing.mobileNumber = mob;
+        }
+        if ((!existing.postmasterName || existing.postmasterName === 'Postmaster') && pm && pm !== 'Postmaster') {
+          existing.postmasterName = pm;
+        }
+        if (existing.initialBalance === 0 && initBal > 0) {
+          existing.initialBalance = initBal;
+        }
+      }
+      continue;
     }
+
+    seenNames.add(nameKey);
+
+    // Strictly guarantee unique ID
+    let finalId = po.id ? String(po.id).trim() : '';
+    if (!finalId || seenIds.has(finalId)) {
+      const candidateId = `po-${nameKey}`;
+      if (!seenIds.has(candidateId)) {
+        finalId = candidateId;
+      } else {
+        finalId = `po-${nameKey}-${cleaned.length + 1}`;
+      }
+    }
+    seenIds.add(finalId);
+
+    cleaned.push({
+      ...po,
+      id: finalId,
+      name: trimmedName,
+      postmasterName: pm,
+      mobileNumber: mob,
+      status: po.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+      initialBalance: initBal >= 0 && initBal < 10000 ? initBal : 0,
+    });
   }
 
   return cleaned.sort((a, b) =>
@@ -359,13 +393,17 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
   );
 }
 
+export const SYSTEM_LAUNCH_DATE = '2026-08-17'; // Official system launch date (17-08-2026)
+
 /**
  * Filters and sanitizes DailyReports, removing any rows where officeName or date is a header title.
  * Also ensures numeric fields never hold phone numbers.
+ * Excludes legacy/test records prior to official launch date 17-08-2026 (specifically 29/07/2026).
+ * Enforces deduplication by office + date and ensures unique IDs across all report items.
  */
 export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
   if (!Array.isArray(reports)) return [];
-  const cleaned: DailyReport[] = [];
+  const officeDateMap = new Map<string, DailyReport>();
 
   const sanitizeArticleCount = (val: any): number => {
     const num = Number(val) || 0;
@@ -373,9 +411,14 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
   };
 
   for (const r of reports) {
-    if (!r || !r.officeName) continue;
-    const trimmedName = String(r.officeName).trim();
+    if (!r || !r.officeName || !r.date) continue;
+    const trimmedName = String(r.officeName).replace(/\s+/g, ' ').trim();
     if (isInvalidPostOfficeName(trimmedName)) continue;
+
+    // Filter out 29/07/2026 and any dates before the official system launch date (17-08-2026)
+    if (r.date === '2026-07-29' || (r.date && r.date < SYSTEM_LAUNCH_DATE)) {
+      continue;
+    }
 
     const dStr = String(r.date || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     if (dStr.includes('date') || dStr.includes('reportdate') || dStr.includes('day')) continue;
@@ -393,7 +436,8 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
     const dep = sanitizeArticleCount(r.deposit);
     const close = sanitizeArticleCount(r.closingBalance) || Math.max(0, lastBal + rec - del - ret - miss - dep);
 
-    cleaned.push({
+    const key = `${trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${r.date}`;
+    const sanitizedReport: DailyReport = {
       ...r,
       officeName: trimmedName,
       postmasterName: pm,
@@ -404,7 +448,40 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
       missent: miss,
       deposit: dep,
       closingBalance: close,
-    });
+    };
+
+    const existing = officeDateMap.get(key);
+    if (!existing) {
+      officeDateMap.set(key, sanitizedReport);
+    } else {
+      // If one report is NOT_SUBMITTED but incoming has real values/submission, prefer the submitted one
+      const existingIsMissing = existing.submittedBy === 'NOT_SUBMITTED' || existing.remarks?.includes('Report not submitted');
+      const incomingIsMissing = sanitizedReport.submittedBy === 'NOT_SUBMITTED' || sanitizedReport.remarks?.includes('Report not submitted');
+      if (existingIsMissing && !incomingIsMissing) {
+        officeDateMap.set(key, sanitizedReport);
+      } else if (!existingIsMissing && !incomingIsMissing) {
+        // Both are submitted, keep the newer submittedAt
+        const extTime = new Date(existing.submittedAt || 0).getTime();
+        const inTime = new Date(sanitizedReport.submittedAt || 0).getTime();
+        if (inTime >= extTime) {
+          officeDateMap.set(key, sanitizedReport);
+        }
+      }
+    }
+  }
+
+  // Ensure unique IDs across all returned reports
+  const seenReportIds = new Set<string>();
+  const cleaned: DailyReport[] = [];
+
+  for (const rep of officeDateMap.values()) {
+    let finalId = rep.id ? String(rep.id).trim() : '';
+    if (!finalId || seenReportIds.has(finalId)) {
+      const officeSlug = rep.officeName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      finalId = `rep_${officeSlug}_${rep.date}_${cleaned.length + 1}`;
+    }
+    seenReportIds.add(finalId);
+    cleaned.push({ ...rep, id: finalId });
   }
 
   return cleaned;
@@ -414,6 +491,7 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
  * Returns a list of daily reports for a target date, automatically including
  * entries for active post offices that have not submitted a report till 5 PM
  * with remarks 'Report not submitted till 5 PM' (or 'Sunday Holiday' on Sundays).
+ * Strictly guarantees unique keys and deduplicated entries for each post office.
  */
 export function getCompleteDateReports(
   reports: DailyReport[],
@@ -425,17 +503,39 @@ export function getCompleteDateReports(
   const validOffices = cleanAndFilterPostOffices(postOffices);
   const validReports = cleanAndFilterReports(reports);
 
+  // If target date is prior to official system launch date (17-08-2026), e.g. 29/07/2026,
+  // do not generate artificial missing records
+  if (targetDate < SYSTEM_LAUNCH_DATE || targetDate === '2026-07-29') {
+    return validReports.filter((r) => r.date === targetDate);
+  }
+
   const isSundayDate = isSunday(targetDate);
   const dateReports = validReports.filter((r) => r.date === targetDate);
-  const submittedOfficeNames = new Set(dateReports.map((r) => r.officeName));
+  const submittedOfficeKeys = new Set(
+    dateReports.map((r) => r.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, ''))
+  );
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
 
-  const missingReports: DailyReport[] = activeOffices
-    .filter((po) => !submittedOfficeNames.has(po.name))
+  // Ensure unique active offices by name
+  const seenActiveNames = new Set<string>();
+  const uniqueActiveOffices = activeOffices.filter((po) => {
+    const key = po.name.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    if (seenActiveNames.has(key)) return false;
+    seenActiveNames.add(key);
+    return true;
+  });
+
+  const missingReports: DailyReport[] = uniqueActiveOffices
+    .filter((po) => !submittedOfficeKeys.has(po.name.toLowerCase().trim().replace(/[^a-z0-9]/g, '')))
     .map((office) => {
       // Find previous submitted report for this office to carry forward last balance if available
       const pastReports = validReports
-        .filter((r) => r.officeName === office.name && r.date < targetDate)
+        .filter(
+          (r) =>
+            r.officeName.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+              office.name.toLowerCase().replace(/[^a-z0-9]/g, '') &&
+            r.date < targetDate
+        )
         .sort((a, b) => (a.date > b.date ? -1 : 1));
 
       let carriedBal = office.initialBalance || 0;
@@ -447,9 +547,12 @@ export function getCompleteDateReports(
             : Math.max(0, prev.lastBalance + prev.receivedToday - prev.delivered - prev.returnedToSender - prev.missent);
       }
 
+      const officeKey = office.name.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      const safeOfficeId = office.id ? office.id.replace(/[^a-zA-Z0-9_.-]/g, '_') : officeKey;
+
       if (isSundayDate) {
         return {
-          id: `sunday_${office.id}_${targetDate}`,
+          id: `sunday_${safeOfficeId}_${targetDate}`,
           date: targetDate,
           officeName: office.name,
           postmasterName: office.postmasterName || '',
@@ -467,7 +570,7 @@ export function getCompleteDateReports(
       }
 
       return {
-        id: `missing_${office.id}_${targetDate}`,
+        id: `missing_${safeOfficeId}_${targetDate}`,
         date: targetDate,
         officeName: office.name,
         postmasterName: office.postmasterName || '',
@@ -484,7 +587,37 @@ export function getCompleteDateReports(
       };
     });
 
-  return [...dateReports, ...missingReports].sort((a, b) =>
+  // Deduplicate combined reports by normalized office name:
+  // Actual submitted reports always override any missing/placeholder records
+  const officeReportMap = new Map<string, DailyReport>();
+  for (const rep of [...dateReports, ...missingReports]) {
+    const normOffice = rep.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const existing = officeReportMap.get(normOffice);
+    if (!existing) {
+      officeReportMap.set(normOffice, rep);
+    } else {
+      const existingIsMissing = existing.submittedBy === 'NOT_SUBMITTED' || existing.remarks?.includes('Report not submitted');
+      const repIsMissing = rep.submittedBy === 'NOT_SUBMITTED' || rep.remarks?.includes('Report not submitted');
+      if (existingIsMissing && !repIsMissing) {
+        officeReportMap.set(normOffice, rep);
+      }
+    }
+  }
+
+  // Ensure every report has a strictly unique id
+  const seenIds = new Set<string>();
+  const finalReports: DailyReport[] = [];
+  for (const rep of officeReportMap.values()) {
+    let safeId = rep.id ? String(rep.id).trim() : '';
+    if (!safeId || seenIds.has(safeId)) {
+      const officeSlug = rep.officeName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      safeId = `${rep.id || 'rep'}_${officeSlug}_${targetDate}_${finalReports.length + 1}`;
+    }
+    seenIds.add(safeId);
+    finalReports.push({ ...rep, id: safeId });
+  }
+
+  return finalReports.sort((a, b) =>
     a.officeName.localeCompare(b.officeName)
   );
 }
@@ -526,7 +659,8 @@ export function getDayOfWeek(dateStr: string): string {
 
 /**
  * Returns all missing report dates for a specific office up to targetDate,
- * strictly EXCLUDING Sundays (Sunday Holiday / Weekly Closed).
+ * strictly starting from official system launch date (17-08-2026),
+ * strictly EXCLUDING dates prior to launch (such as 29/07/2026) and Sundays.
  */
 export function getMissingDatesForOffice(
   officeName: string,
@@ -535,11 +669,23 @@ export function getMissingDatesForOffice(
 ): string[] {
   if (!targetDate) return [];
 
-  // Get all unique dates present in reports up to targetDate, including targetDate
+  // If targetDate is before system launch date (17-08-2026) or is 29/07/2026, no pendency applies
+  if (targetDate < SYSTEM_LAUNCH_DATE || targetDate === '2026-07-29') {
+    return [];
+  }
+
+  // Get all unique dates present in reports up to targetDate, strictly bounded by SYSTEM_LAUNCH_DATE
+  // Excludes 2026-07-29, any dates < SYSTEM_LAUNCH_DATE, and Sundays
   const allDates = Array.from(
     new Set([...reports.map((r) => r.date), targetDate])
   )
-    .filter((d) => d <= targetDate && !isSunday(d)) // Strictly exclude Sundays
+    .filter(
+      (d) =>
+        d >= SYSTEM_LAUNCH_DATE &&
+        d !== '2026-07-29' &&
+        d <= targetDate &&
+        !isSunday(d)
+    )
     .sort();
 
   const submittedDates = new Set(
@@ -553,6 +699,7 @@ export function getMissingDatesForOffice(
  * Returns complete daily reports for ALL dates present in the system,
  * ensuring every date contains ALL active post offices (both submitted reports
  * AND non-submitted/pending or Sunday holiday entries with carried forward balances).
+ * Strictly starting from SYSTEM_LAUNCH_DATE (17-08-2026).
  */
 export function getAllDatesCompleteReports(
   reports: DailyReport[],
@@ -561,8 +708,12 @@ export function getAllDatesCompleteReports(
   const validOffices = cleanAndFilterPostOffices(postOffices);
   const validReports = cleanAndFilterReports(reports);
 
-  // Extract all unique dates from existing reports
-  const dateSet = new Set<string>(validReports.map((r) => r.date).filter(Boolean));
+  // Extract all unique dates from existing reports, strictly on or after SYSTEM_LAUNCH_DATE
+  const dateSet = new Set<string>(
+    validReports
+      .map((r) => r.date)
+      .filter((d) => Boolean(d) && d >= SYSTEM_LAUNCH_DATE && d !== '2026-07-29')
+  );
   if (dateSet.size === 0) {
     dateSet.add(getTodayDateString());
   }

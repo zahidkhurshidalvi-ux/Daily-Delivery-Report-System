@@ -6,6 +6,7 @@ import {
   cleanAndFilterPostOffices,
   cleanAndFilterReports,
   getMissingDatesForOffice,
+  SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import {
   Download,
@@ -944,6 +945,7 @@ ${divisionName}`;
               <input
                 type="date"
                 value={targetDate}
+                min={SYSTEM_LAUNCH_DATE}
                 onChange={(e) => setTargetDate(e.target.value)}
                 className="bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded px-2 py-1"
               />
@@ -1105,7 +1107,7 @@ ${divisionName}`;
 
                       return (
                         <tr
-                          key={item.office.id}
+                          key={item.office.id ? `${item.office.id}_${item.office.name}` : `issue-office-${idx}`}
                           onClick={() => setSelectedOfficeName(item.office.name)}
                           className={`transition-colors cursor-pointer ${
                             isSelected

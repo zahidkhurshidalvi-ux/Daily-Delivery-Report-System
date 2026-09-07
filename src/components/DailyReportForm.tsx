@@ -8,6 +8,7 @@ import {
   formatDatePK,
   cleanAndFilterPostOffices,
   isSunday,
+  SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import { AlertCircle, CheckCircle2, Calculator, Save, FileText } from 'lucide-react';
 
@@ -157,6 +158,14 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       return;
     }
 
+    // 0b. Launch date check: Official system launch date is 17-08-2026
+    if (date < SYSTEM_LAUNCH_DATE || date === '2026-07-29') {
+      setErrorMessage(
+        'The reporting system was officially launched on 17/08/2026. Daily reports cannot be submitted for dates prior to 17/08/2026.'
+      );
+      return;
+    }
+
     // 1. Validation check
     const valError = validateReportFields({
       date,
@@ -298,6 +307,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
             <input
               type="date"
               value={date}
+              min={SYSTEM_LAUNCH_DATE}
               onChange={(e) => {
                 const newDate = e.target.value;
                 setDate(newDate);
@@ -309,6 +319,11 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
               className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
               required
             />
+            {(date < SYSTEM_LAUNCH_DATE || date === '2026-07-29') && (
+              <p className="text-[11px] text-blue-700 font-bold mt-1 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded flex items-center">
+                <span>⚠️ System launched on 17/08/2026. Submissions for pre-launch dates are disabled.</span>
+              </p>
+            )}
             {isSunday(date) && (
               <p className="text-[11px] text-amber-700 font-bold mt-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded flex items-center">
                 <span>⚠️ Sunday Holiday (Weekly Closed) — Excluded from missing reports & explanation notices.</span>

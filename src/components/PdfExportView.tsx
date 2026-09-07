@@ -12,6 +12,7 @@ import {
   getCompleteDateReports,
   getTodayDateString,
   isSunday,
+  SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import {
   Printer,
@@ -82,6 +83,7 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
           <input
             type="date"
             value={selectedDate}
+            min={SYSTEM_LAUNCH_DATE}
             onChange={(e) => setSelectedDate(e.target.value)}
             className="bg-white border border-gray-300 text-gray-900 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#006633]"
           />
@@ -248,7 +250,7 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
 
                     return (
                       <tr
-                        key={r.id}
+                        key={r.id ? `${r.id}_${r.officeName}_${idx}` : `pdf-rep-${idx}`}
                         className={
                           rowIsSun
                             ? 'bg-amber-50/50'

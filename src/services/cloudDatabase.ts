@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { PostOffice, DailyReport, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig } from '../types';
-import { cleanAndFilterPostOffices, cleanAndFilterReports } from '../utils/calculations';
+import { cleanAndFilterPostOffices, cleanAndFilterReports, SYSTEM_LAUNCH_DATE } from '../utils/calculations';
 
 const POST_OFFICES_COL = 'postOffices';
 const DAILY_REPORTS_COL = 'dailyReports';
@@ -70,6 +70,11 @@ export async function fetchAllDailyReportsFromCloud(): Promise<DailyReport[]> {
     const reports: DailyReport[] = [];
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
+      // Automatically purge legacy/test records prior to official launch date 17-08-2026 (specifically 29/07/2026)
+      if (data && data.date && (data.date === '2026-07-29' || data.date < SYSTEM_LAUNCH_DATE)) {
+        deleteDoc(docSnap.ref).catch(() => {});
+        return;
+      }
       if (data && data.date && (data.officeName || data.postOfficeName)) {
         reports.push({
           id: docSnap.id,
@@ -110,6 +115,11 @@ export function subscribeToDailyReports(
       const reports: DailyReport[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        // Automatically purge legacy/test records prior to official launch date 17-08-2026 (specifically 29/07/2026)
+        if (data && data.date && (data.date === '2026-07-29' || data.date < SYSTEM_LAUNCH_DATE)) {
+          deleteDoc(docSnap.ref).catch(() => {});
+          return;
+        }
         if (data && data.date && (data.officeName || data.postOfficeName)) {
           reports.push({
             id: docSnap.id,
