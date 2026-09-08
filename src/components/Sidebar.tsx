@@ -11,6 +11,8 @@ import {
   ScrollText,
   AlertTriangle,
   CalendarOff,
+  Smartphone,
+  Download,
 } from 'lucide-react';
 
 export type NavTab =
@@ -24,6 +26,7 @@ export type NavTab =
   | 'users'
   | 'issue-explanation'
   | 'whatsapp-triggers'
+  | 'admob'
   | 'logs';
 
 interface SidebarProps {
@@ -32,6 +35,7 @@ interface SidebarProps {
   userRole: UserRole | 'PUBLIC';
   pendingCount: number;
   onOpenAdminLogin: () => void;
+  onOpenDownloadApp?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -39,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   userRole,
   pendingCount,
+  onOpenDownloadApp,
 }) => {
   // When Admin is logged in: Dashboard is at the very TOP
   // When Public/Office user: Submit Daily Report is at the top
@@ -66,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             role: 'ADMIN',
           },
           { id: 'whatsapp-triggers', label: 'WhatsApp & Triggers', icon: MessageSquare, role: 'ADMIN' },
+          { id: 'admob', label: 'AdMob & Android App', icon: Smartphone, role: 'ADMIN' },
           { id: 'logs', label: 'System Audit Logs', icon: ScrollText, role: 'ADMIN' },
         ]
       : [
@@ -122,6 +128,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
+
+        {/* Download Android APK Button */}
+        {onOpenDownloadApp && (
+          <div className="pt-3 mt-3 border-t border-[#005522]">
+            <button
+              type="button"
+              onClick={onOpenDownloadApp}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-yellow-400 hover:bg-yellow-300 text-slate-950 text-xs font-black transition-all shadow-md cursor-pointer"
+            >
+              <div className="flex items-center space-x-2">
+                <Download className="w-4 h-4" />
+                <span>Download Android APK</span>
+              </div>
+              <span className="text-[10px] bg-slate-950 text-yellow-400 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
+                APK
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

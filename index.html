@@ -7,11 +7,58 @@
     <meta name="description" content="Official Divisional Superintendent Postal Services Daily Delivery Reporting System featuring multi-role authentication, automated balance carry-forward, pending office monitoring, WhatsApp reminders, PDF/Excel generation, and Google Apps Script integration." />
     <meta property="og:title" content="Pakistan Post - Daily Delivery Reporting System" />
     <meta property="og:description" content="Official Divisional Superintendent Postal Services Daily Delivery Reporting System featuring multi-role authentication, automated balance carry-forward, pending office monitoring, WhatsApp reminders, PDF/Excel generation, and Google Apps Script integration." />
+    <meta name="theme-color" content="#00401A" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PakPost Delivery" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then((registration) => {
+            // Check for updates on focus and periodically so app is always up to date
+            setInterval(() => {
+              registration.update();
+            }, 60 * 1000);
+
+            document.addEventListener('visibilitychange', () => {
+              if (document.visibilityState === 'visible') {
+                registration.update();
+              }
+            });
+
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                  }
+                });
+              }
+            });
+          }).catch(err => {
+            console.log('SW registration note:', err);
+          });
+
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          });
+        });
+      }
+    </script>
   </body>
 </html>
 

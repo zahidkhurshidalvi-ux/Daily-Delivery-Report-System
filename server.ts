@@ -8,9 +8,16 @@ async function startServer() {
 
   app.use(express.json());
 
-  // API health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", service: "Daily Delivery Reporting System", timestamp: new Date().toISOString() });
+  });
+
+  // Dedicated route to serve real signed Android APK
+  app.get(["/PakistanPost_DDRS.apk", "/PakistanPost_DeliveryReport.apk", "/download/apk"], (req, res) => {
+    const apkFile = path.join(process.cwd(), "public", "PakistanPost_DDRS.apk");
+    res.setHeader("Content-Disposition", 'attachment; filename="PakistanPost_DDRS.apk"');
+    res.setHeader("Content-Type", "application/vnd.android.package-archive");
+    res.sendFile(apkFile);
   });
 
   // Vite middleware for development

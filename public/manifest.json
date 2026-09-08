@@ -1,0 +1,38 @@
+{
+  "id": "/?mode=user",
+  "name": "Pakistan Post - Daily Delivery Reporting",
+  "short_name": "PakPost DDRS",
+  "description": "Official Pakistan Post Daily Delivery Reporting Android Mobile Application",
+  "start_url": "/?mode=user",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#00401A",
+  "theme_color": "#00401A",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

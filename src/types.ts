@@ -102,3 +102,16 @@ export interface GoogleSheetsConfig {
   liveSyncConfig?: boolean;
 }
 
+export interface AdMobConfig {
+  enabled: boolean;
+  appId: string;
+  bannerAdUnitId: string;
+  interstitialAdUnitId: string;
+  rewardedAdUnitId: string;
+  showOnFormOpen: boolean;
+  showOnReportSubmit: boolean;
+  testMode: boolean;
+  adFrequencySeconds: number;
+}
+
+

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, DailyReport, PostOffice, WhatsAppConfig, TriggerConfig, SystemLog } from './types';
+import { User, DailyReport, PostOffice, WhatsAppConfig, TriggerConfig, SystemLog, AdMobConfig } from './types';
 import {
   INITIAL_POST_OFFICES,
   INITIAL_USERS,
@@ -43,6 +43,9 @@ import { UserManagement } from './components/UserManagement';
 import { IssueExplanation } from './components/IssueExplanation';
 import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
+import { AdMobManager } from './components/AdMobManager';
+import { UserMobileAppView } from './components/UserMobileAppView';
+import { DownloadAppModal } from './components/DownloadAppModal';
 
 // Helper function to merge two post office lists preserving contact numbers and mobile numbers
 function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[]): PostOffice[] {
@@ -123,6 +126,42 @@ export default function App() {
     const saved = localStorage.getItem('pakpost_triggers');
     return saved ? JSON.parse(saved) : INITIAL_TRIGGER_CONFIG;
   });
+
+  const [adMobConfig, setAdMobConfig] = useState<AdMobConfig>(() => {
+    const saved = localStorage.getItem('pakpost_admob');
+    return saved
+      ? JSON.parse(saved)
+      : {
+          enabled: true,
+          appId: 'ca-app-pub-3940256099942544~3347511713',
+          bannerAdUnitId: 'ca-app-pub-3940256099942544/6300978111',
+          interstitialAdUnitId: 'ca-app-pub-3940256099942544/1033173712',
+          rewardedAdUnitId: 'ca-app-pub-3940256099942544/5224354917',
+          showOnFormOpen: true,
+          showOnReportSubmit: true,
+          testMode: true,
+          adFrequencySeconds: 30,
+        };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pakpost_admob', JSON.stringify(adMobConfig));
+  }, [adMobConfig]);
+
+  // Check URL param or user preference for User Mobile App vs Admin Portal
+  const [appMode, setAppMode] = useState<'ADMIN' | 'USER'>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const mode = params.get('mode') || params.get('view');
+      if (mode === 'user' || mode === 'app') return 'USER';
+      if (mode === 'admin') return 'ADMIN';
+    } catch {
+      // ignore
+    }
+    return currentUser?.role === 'POST_OFFICE' ? 'USER' : 'ADMIN';
+  });
+
+  const [showDownloadAppModal, setShowDownloadAppModal] = useState<boolean>(false);
 
   const [logs, setLogs] = useState<SystemLog[]>([
     {
@@ -205,6 +244,7 @@ export default function App() {
     const unsubConfig = subscribeToAppConfig((cfg) => {
       if (cfg.whatsAppConfig) setWhatsAppConfig(cfg.whatsAppConfig);
       if (cfg.triggerConfig) setTriggerConfig(cfg.triggerConfig);
+      if (cfg.adMobConfig) setAdMobConfig(cfg.adMobConfig);
     });
 
     const unsubHolidays = subscribeToHolidays(() => {
@@ -483,6 +523,21 @@ export default function App() {
       ? 0
       : activeOffices.filter((po) => !todaySubmittedSet.has(po.name)).length;
 
+  if (appMode === 'USER') {
+    return (
+      <div className="min-h-screen bg-slate-200 text-slate-800 font-sans flex flex-col items-center justify-start sm:py-6">
+        <UserMobileAppView
+          currentUser={currentUser}
+          postOffices={postOffices}
+          reports={reports}
+          onSubmitReport={handleSubmitDailyReport}
+          adMobConfig={adMobConfig}
+          onSwitchToAdmin={() => setAppMode('ADMIN')}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-slate-800 font-sans flex flex-col">
       {/* Optional Admin Login Modal */}
@@ -506,6 +561,8 @@ export default function App() {
         onToggleAutoRefresh={() => setAutoRefreshEnabled((prev) => !prev)}
         onManualRefresh={handleRefreshData}
         lastRefreshedAt={lastRefreshedAt}
+        onSwitchToUserApp={() => setAppMode('USER')}
+        onOpenDownloadApp={() => setShowDownloadAppModal(true)}
       />
 
       {/* Main Body */}
@@ -517,6 +574,7 @@ export default function App() {
           userRole={currentUser ? currentUser.role : 'PUBLIC'}
           pendingCount={pendingCountToday}
           onOpenAdminLogin={() => setShowAdminLoginModal(true)}
+          onOpenDownloadApp={() => setShowDownloadAppModal(true)}
         />
 
         {/* Content Area */}
@@ -641,9 +699,23 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'admob' && (
+            <AdMobManager
+              config={adMobConfig}
+              onUpdateConfig={(newCfg) => setAdMobConfig(newCfg)}
+              onOpenUserAppView={() => setAppMode('USER')}
+            />
+          )}
+
           {activeTab === 'logs' && <SystemLogs logs={logs} />}
         </main>
       </div>
+
+      {/* Download / Install App Modal */}
+      <DownloadAppModal
+        isOpen={showDownloadAppModal}
+        onClose={() => setShowDownloadAppModal(false)}
+      />
     </div>
   );
 }
