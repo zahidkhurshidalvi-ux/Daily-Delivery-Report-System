@@ -9,6 +9,7 @@ import {
   cleanAndFilterPostOffices,
   isSunday,
   normalizeDateToIso,
+  getMissingDatesForOffice,
   SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import {
@@ -154,6 +155,11 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       r.submittedBy !== 'NOT_SUBMITTED' &&
       !r.remarks?.includes('Report not submitted')
   );
+
+  // Missing/Pending dates for the currently selected office up to today (excluding Sundays, public holidays, pre-launch)
+  const pendingDatesForOffice = selectedOfficeName
+    ? getMissingDatesForOffice(selectedOfficeName, today, reports)
+    : [];
 
   // Parsed numeric values for calculation
   const numLastBal = parseInt(lastBalance, 10) || 0;
@@ -428,36 +434,91 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         </div>
       )}
 
-      {/* Live Status Card for Selected Office & Date */}
-      <div className="mb-6 p-3.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-all bg-white border-gray-200 shadow-xs">
-        <div className="flex items-center space-x-2.5">
-          <Calendar className="w-4 h-4 text-gray-500 shrink-0" />
-          <div>
-            <span className="font-bold text-gray-800">
-              Selected Target: <span className="font-mono text-gray-900">{formatDatePK(date)}</span>
-            </span>
-            <span className="text-gray-500 block text-[11px]">
-              Office: <strong className="text-gray-700">{selectedOfficeName || 'Not Selected'}</strong>
-            </span>
-          </div>
-        </div>
+      {/* Office-specific Pending Dates Notice (Shows which dates are pending for the selected office) */}
+      {selectedOfficeName && (
+        <div
+          className={`mb-6 p-4 rounded-xl border transition-all ${
+            pendingDatesForOffice.length > 0
+              ? 'bg-amber-50/90 border-amber-300 text-amber-950 shadow-xs'
+              : 'bg-emerald-50/90 border-emerald-300 text-emerald-950 shadow-xs'
+          }`}
+        >
+          {pendingDatesForOffice.length > 0 ? (
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200 pb-2.5 mb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-amber-950 flex flex-wrap items-center gap-2">
+                      <span>پوسٹ آفس: <strong className="text-[#006633]">{selectedOfficeName}</strong></span>
+                      <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        {pendingDatesForOffice.length} {pendingDatesForOffice.length === 1 ? 'Date Pending' : 'Dates Pending'}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-amber-900 font-semibold mt-0.5">
+                      آپ کے دفتر کی مندرجہ ذیل تاریخوں کی Daily Delivery Reports تاحال غیر موصول / پینڈنگ ہیں:
+                    </p>
+                  </div>
+                </div>
+                <div className="text-[11px] font-bold text-amber-800">
+                  کسی بھی تاریخ پر کلک کر کے اس دن کی رپورٹ درج کریں 👇
+                </div>
+              </div>
 
-        {existingReportForSelected ? (
-          <div className="bg-emerald-50 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-md flex items-center space-x-2 text-[11px] font-bold">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>
-              رپورٹ موصول شدہ (Recorded in Cloud). دوبارہ جمع کروانے سے ریکارڈ اپ ڈیٹ ہو گا۔
-            </span>
-          </div>
-        ) : (
-          <div className="bg-amber-50 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-md flex items-center space-x-2 text-[11px] font-bold">
-            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              غیر موصولہ / پینڈنگ (Pending for {formatDatePK(date)}). براہ کرم رپورٹ جمع کروائیں۔
-            </span>
-          </div>
-        )}
-      </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                {pendingDatesForOffice.map((pDate) => {
+                  const isCurSelected = normalizeDateToIso(pDate) === normalizeDateToIso(date);
+                  return (
+                    <button
+                      key={pDate}
+                      type="button"
+                      onClick={() => {
+                        setDate(pDate);
+                        setErrorMessage(null);
+                        setSuccessMessage(null);
+                      }}
+                      className={`text-xs px-3 py-1.5 rounded-lg font-mono font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-2xs ${
+                        isCurSelected
+                          ? 'bg-red-600 text-white ring-2 ring-red-400 font-black'
+                          : 'bg-white hover:bg-amber-100 text-amber-950 border border-amber-300 hover:border-amber-400'
+                      }`}
+                      title={`Click to fill report for ${formatDatePK(pDate)}`}
+                    >
+                      <Calendar className="w-3.5 h-3.5 shrink-0" />
+                      <span>{formatDatePK(pDate)}</span>
+                      {isCurSelected ? (
+                        <span className="text-[10px] bg-white/25 text-white px-1.5 py-0.2 rounded font-sans font-black">
+                          Selected
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-red-600 font-bold font-sans">
+                          (Pending)
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-emerald-950">
+                  پوسٹ آفس: <strong className="text-[#006633]">{selectedOfficeName}</strong>
+                </h3>
+                <p className="text-xs text-emerald-900 font-bold mt-0.5">
+                  ✓ ماشاءاللہ! آپ کے دفتر کی تمام تاریخوں کی رپورٹس مکمل موصول ہو چکی ہیں (کوئی پینڈنسی نہیں ہے)۔
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Date & Post Office Selection */}
@@ -501,6 +562,12 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
             {isSunday(date) && (
               <p className="text-[11px] text-amber-700 font-bold mt-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded flex items-center">
                 <span>⚠️ Sunday Holiday (Weekly Closed) — Excluded from missing reports & explanation notices.</span>
+              </p>
+            )}
+            {existingReportForSelected && (
+              <p className="text-[11px] text-emerald-850 font-bold mt-1 bg-emerald-50 border border-emerald-300 px-2 py-1 rounded flex items-center space-x-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>اس تاریخ ({formatDatePK(date)}) کی رپورٹ کلاؤڈ میں موصول شدہ ہے۔ دوبارہ جمع کروانے سے ریکارڈ اپ ڈیٹ ہو جائے گا۔</span>
               </p>
             )}
           </div>
