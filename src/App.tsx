@@ -14,6 +14,7 @@ import {
   isInvalidPostOfficeName,
   isSunday,
   isHoliday,
+  normalizeDateToIso,
   SYSTEM_LAUNCH_DATE,
 } from './utils/calculations';
 import {
@@ -296,20 +297,30 @@ export default function App() {
     isEdit: boolean
   ) => {
     const officeNameSafe = (reportData.officeName || 'office').replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const normOffice = (name: string) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const reportDateIso = normalizeDateToIso(reportData.date) || reportData.date;
+    const targetOfficeNorm = normOffice(reportData.officeName);
+
     const existingRep = reports.find(
-      (r) => (editingReport && r.id === editingReport.id) || (r.officeName === reportData.officeName && r.date === reportData.date)
+      (r) =>
+        (editingReport && r.id === editingReport.id) ||
+        (normOffice(r.officeName) === targetOfficeNorm &&
+          (normalizeDateToIso(r.date) || r.date) === reportDateIso)
     );
 
     if (existingRep || (isEdit && editingReport)) {
-      const targetId = existingRep?.id || editingReport?.id || `rep-${reportData.date}-${officeNameSafe}`;
+      const targetId = existingRep?.id || editingReport?.id || `rep-${reportDateIso}-${officeNameSafe}`;
       const updatedReportRecord: DailyReport = {
         ...(existingRep || editingReport || {}),
         ...reportData,
+        date: reportDateIso,
         id: targetId,
         updatedAt: new Date().toISOString(),
       };
       const updatedReports = reports.map((r) =>
-        r.id === targetId || (r.officeName === reportData.officeName && r.date === reportData.date)
+        r.id === targetId ||
+        (normOffice(r.officeName) === targetOfficeNorm &&
+          (normalizeDateToIso(r.date) || r.date) === reportDateIso)
           ? updatedReportRecord
           : r
       );
@@ -320,23 +331,31 @@ export default function App() {
       await saveDailyReportToCloud(updatedReportRecord);
       logAction(
         'REPORT_UPDATE',
-        `Updated report for ${reportData.officeName} on ${reportData.date}. Closing Bal: ${reportData.closingBalance}`
+        `Updated report for ${reportData.officeName} on ${reportDateIso}. Closing Bal: ${reportData.closingBalance}`
       );
       setEditingReport(null);
     } else {
       const newReportRecord: DailyReport = {
         ...reportData,
-        id: `rep-${reportData.date}-${officeNameSafe}`,
+        date: reportDateIso,
+        id: `rep-${reportDateIso}-${officeNameSafe}`,
         submittedAt: new Date().toISOString(),
       };
       setReports((prev) => {
-        const filtered = prev.filter((r) => r.id !== newReportRecord.id && !(r.officeName === newReportRecord.officeName && r.date === newReportRecord.date));
+        const filtered = prev.filter(
+          (r) =>
+            r.id !== newReportRecord.id &&
+            !(
+              normOffice(r.officeName) === targetOfficeNorm &&
+              (normalizeDateToIso(r.date) || r.date) === reportDateIso
+            )
+        );
         return [newReportRecord, ...filtered];
       });
       await saveDailyReportToCloud(newReportRecord);
       logAction(
         'REPORT_SUBMIT',
-        `Submitted daily report for ${reportData.officeName} on ${reportData.date}. Closing Bal: ${reportData.closingBalance}`
+        `Submitted daily report for ${reportData.officeName} on ${reportDateIso}. Closing Bal: ${reportData.closingBalance}`
       );
     }
   };
@@ -474,14 +493,29 @@ export default function App() {
 
   // Calculate pending office count for today
   const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
-  const todaySubmittedSet = new Set(reports.filter((r) => r.date === today).map((r) => r.officeName));
+  const todayIso = normalizeDateToIso(today) || today;
+  const todaySubmittedSet = new Set(
+    reports
+      .filter(
+        (r) =>
+          (normalizeDateToIso(r.date) || r.date) === todayIso &&
+          r.submittedBy !== 'NOT_SUBMITTED' &&
+          !r.remarks?.includes('Report not submitted')
+      )
+      .map((r) => String(r.officeName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, ''))
+  );
   const isTodaySunday = isSunday(today);
   const isTodayHoliday = isHoliday(today);
   const isTodayPreLaunch = today < SYSTEM_LAUNCH_DATE || today === '2026-07-29';
   const pendingCountToday =
     isTodaySunday || isTodayHoliday || isTodayPreLaunch
       ? 0
-      : activeOffices.filter((po) => !todaySubmittedSet.has(po.name)).length;
+      : activeOffices.filter(
+          (po) =>
+            !todaySubmittedSet.has(
+              String(po.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '')
+            )
+        ).length;
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-slate-800 font-sans flex flex-col">
@@ -542,6 +576,7 @@ export default function App() {
               editingReport={editingReport}
               onCancelEdit={() => setEditingReport(null)}
               currentUser={currentUser}
+              onViewPending={() => setActiveTab('pending-reports')}
             />
           )}
 

@@ -644,8 +644,13 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
 
     const normalizedDate = normalizeDateToIso(r.date) || r.date;
 
-    // Filter out 29/07/2026 and any dates before the official system launch date (17-08-2026)
-    if (normalizedDate === '2026-07-29' || (normalizedDate && normalizedDate < SYSTEM_LAUNCH_DATE)) {
+    // Filter out 29/07/2026, dates before the official launch date, and future dates
+    const todayIso = getTodayDateString();
+    if (
+      normalizedDate === '2026-07-29' ||
+      (normalizedDate && normalizedDate < SYSTEM_LAUNCH_DATE) ||
+      (normalizedDate && normalizedDate > todayIso)
+    ) {
       continue;
     }
 
@@ -947,23 +952,27 @@ export function getMissingDatesForOffice(
   if (!targetDate || !officeName) return [];
 
   const isoTarget = normalizeDateToIso(targetDate);
+  const todayIso = getTodayDateString();
 
   // If targetDate is before system launch date (17-08-2026) or is 29/07/2026, no pendency applies
   if (!isoTarget || isoTarget < SYSTEM_LAUNCH_DATE || isoTarget === '2026-07-29') {
     return [];
   }
 
-  // Get all unique dates present in reports up to targetDate, strictly bounded by SYSTEM_LAUNCH_DATE
+  // Strict upper bound: cannot be in the future beyond today
+  const effectiveTarget = isoTarget > todayIso ? todayIso : isoTarget;
+
+  // Get all unique dates present in reports up to effectiveTarget, strictly bounded by SYSTEM_LAUNCH_DATE
   // Excludes 2026-07-29, any dates < SYSTEM_LAUNCH_DATE, Sundays, and declared public holidays (e.g. 26/08/2026)
   const allDates = Array.from(
-    new Set([...reports.map((r) => normalizeDateToIso(r.date)), isoTarget])
+    new Set([...reports.map((r) => normalizeDateToIso(r.date)), effectiveTarget])
   )
     .filter(
       (d) =>
         Boolean(d) &&
         d >= SYSTEM_LAUNCH_DATE &&
         d !== '2026-07-29' &&
-        d <= isoTarget &&
+        d <= effectiveTarget &&
         !isSunday(d) &&
         !isHoliday(d) &&
         d !== '2026-08-26'

@@ -8,17 +8,29 @@ import {
   formatDatePK,
   cleanAndFilterPostOffices,
   isSunday,
+  normalizeDateToIso,
   SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
-import { AlertCircle, CheckCircle2, Calculator, Save, FileText } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Calculator,
+  Save,
+  FileText,
+  Loader2,
+  ShieldCheck,
+  Calendar,
+  Clock,
+} from 'lucide-react';
 
 interface DailyReportFormProps {
   currentUser: User | null;
   postOffices: PostOffice[];
   reports: DailyReport[];
-  onSubmitReport: (report: Omit<DailyReport, 'id' | 'submittedAt'>, isEdit: boolean) => void;
+  onSubmitReport: (report: Omit<DailyReport, 'id' | 'submittedAt'>, isEdit: boolean) => Promise<any> | void;
   editingReport?: DailyReport | null;
   onCancelEdit?: () => void;
+  onViewPending?: () => void;
 }
 
 export const DailyReportForm: React.FC<DailyReportFormProps> = ({
@@ -28,6 +40,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
   onSubmitReport,
   editingReport,
   onCancelEdit,
+  onViewPending,
 }) => {
   const today = getTodayDateString();
 
@@ -80,6 +93,18 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionReceipt, setSubmissionReceipt] = useState<{
+    trackingId: string;
+    submittedAt: string;
+    officeName: string;
+    date: string;
+    isEdit: boolean;
+    closingBalance: number;
+    delivered: number;
+    receivedToday: number;
+    lastBalance: number;
+  } | null>(null);
 
   // Auto-fill Last Balance from previous day closing/deposit balance whenever office or date changes
   useEffect(() => {
@@ -119,6 +144,17 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
   const selectedOffice = postOffices.find((po) => po.name === selectedOfficeName);
 
+  // Check if a report is already recorded in the cloud database for this office and date
+  const normOffice = (name: string) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  const selectedDateIso = normalizeDateToIso(date) || date;
+  const existingReportForSelected = reports.find(
+    (r) =>
+      normOffice(r.officeName) === normOffice(selectedOfficeName) &&
+      (normalizeDateToIso(r.date) || r.date) === selectedDateIso &&
+      r.submittedBy !== 'NOT_SUBMITTED' &&
+      !r.remarks?.includes('Report not submitted')
+  );
+
   // Parsed numeric values for calculation
   const numLastBal = parseInt(lastBalance, 10) || 0;
   const numReceived = parseInt(receivedToday, 10) || 0;
@@ -138,10 +174,13 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
     setDeposit(String(calculatedRemainingDeposit));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     setErrorMessage(null);
     setSuccessMessage(null);
+    setSubmissionReceipt(null);
 
     const parsedLastBalance = parseInt(lastBalance, 10) || 0;
     const parsedReceivedToday = parseInt(receivedToday, 10) || 0;
@@ -158,7 +197,15 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       return;
     }
 
-    // 0b. Launch date check: Official system launch date is 17-08-2026
+    // 0b. Future date check
+    if (date > today) {
+      setErrorMessage(
+        'مستقبل کی تاریخ کی رپورٹ جمع نہیں کروائی جا سکتی۔ براہ کرم آج کی یا سابقہ تاریخ منتخب کریں۔ (Future date reports cannot be submitted).'
+      );
+      return;
+    }
+
+    // 0c. Launch date check: Official system launch date is 17-08-2026
     if (date < SYSTEM_LAUNCH_DATE || date === '2026-07-29') {
       setErrorMessage(
         'The reporting system was officially launched on 17/08/2026. Daily reports cannot be submitted for dates prior to 17/08/2026.'
@@ -189,8 +236,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
     }
 
     // 2. Determine if it is a new submission or update
-    const existing = reports.find((r) => r.officeName === selectedOfficeName && r.date === date);
-    const isEdit = Boolean(editingReport) || Boolean(existing);
+    const isEdit = Boolean(editingReport) || Boolean(existingReportForSelected);
 
     // Calculate accurate Closing Balance
     const calculatedClosingBal = calculateClosingBalance(
@@ -220,21 +266,53 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         : `office_${(selectedOffice?.name || 'unknown').toLowerCase().replace(/\s+/g, '_')}`,
     };
 
-    onSubmitReport(newReport, isEdit);
-    setSuccessMessage(
-      `Daily Delivery Report for ${selectedOffice.name} (${formatDatePK(date)}) ${
-        isEdit ? 'updated' : 'submitted'
-      } successfully!`
-    );
+    setIsSubmitting(true);
+    try {
+      // Must await the promise to ensure data is genuinely saved to Cloud Firestore
+      await onSubmitReport(newReport, isEdit);
 
-    // Reset form fields
-    if (!isEdit) {
-      setReceivedToday('');
-      setDelivered('');
-      setReturnedToSender('');
-      setMissent('');
-      setDeposit('');
-      setRemarks('');
+      const trackingId = `PKPOST-REP-${date.replace(/-/g, '')}-${selectedOffice.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase()}`;
+      const timeStr = new Date().toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
+
+      setSubmissionReceipt({
+        trackingId,
+        submittedAt: timeStr,
+        officeName: selectedOffice.name,
+        date,
+        isEdit,
+        closingBalance: calculatedClosingBal,
+        delivered: parsedDelivered,
+        receivedToday: parsedReceivedToday,
+        lastBalance: parsedLastBalance,
+      });
+
+      setSuccessMessage(
+        `Daily Delivery Report for ${selectedOffice.name} (${formatDatePK(date)}) ${
+          isEdit ? 'updated' : 'submitted'
+        } successfully and verified in Central Cloud Database!`
+      );
+
+      // Reset form fields only on new submission
+      if (!isEdit) {
+        setReceivedToday('');
+        setDelivered('');
+        setReturnedToSender('');
+        setMissent('');
+        setDeposit('');
+        setRemarks('');
+      }
+    } catch (err: any) {
+      console.error('Submission error:', err);
+      setErrorMessage(
+        `رپورٹ کلاؤڈ ڈیٹا بیس میں محفوظ نہیں ہو سکی! انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔ (${err?.message || 'Network Timeout'})`
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -265,18 +343,82 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         )}
       </div>
 
+      {/* Verified Cloud Receipt Card */}
+      {submissionReceipt && (
+        <div className="mb-6 bg-emerald-50 border-2 border-emerald-500 rounded-xl p-5 text-emerald-950 shadow-sm animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-200 pb-4 mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-emerald-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-xs">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="bg-emerald-600 text-white font-black text-[10px] px-2 py-0.5 rounded uppercase tracking-wider">
+                    Cloud Verified Receipt
+                  </span>
+                  <span className="text-xs font-mono font-bold text-emerald-800">
+                    {submissionReceipt.trackingId}
+                  </span>
+                </div>
+                <h3 className="text-base font-black text-emerald-900 mt-0.5">
+                  رپورٹ کلاؤڈ ڈیٹا بیس میں کامیابی سے تصدیق اور محفوظ ہو گئی ہے!
+                </h3>
+              </div>
+            </div>
+            <div className="text-right sm:text-right">
+              <span className="text-[11px] text-emerald-700 font-semibold block">Confirmed At:</span>
+              <span className="text-xs font-mono font-black text-emerald-900">{submissionReceipt.submittedAt}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-4">
+            <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-200">
+              <span className="text-emerald-700 text-[10px] font-bold block">Post Office:</span>
+              <span className="font-bold text-emerald-950 text-sm truncate block">{submissionReceipt.officeName}</span>
+            </div>
+            <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-200">
+              <span className="text-emerald-700 text-[10px] font-bold block">Report Date:</span>
+              <span className="font-bold text-emerald-950 text-sm block font-mono">{formatDatePK(submissionReceipt.date)}</span>
+            </div>
+            <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-200">
+              <span className="text-emerald-700 text-[10px] font-bold block">Received Today:</span>
+              <span className="font-bold text-emerald-950 text-sm block font-mono">{formatNumber(submissionReceipt.receivedToday)}</span>
+            </div>
+            <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-200">
+              <span className="text-emerald-700 text-[10px] font-bold block">Closing Balance:</span>
+              <span className="font-bold text-emerald-950 text-sm block font-mono">{formatNumber(submissionReceipt.closingBalance)}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1">
+            <p className="text-[11px] text-emerald-800 font-medium">
+              ✓ یہ رسید آپ کے دفتر کے ریکارڈ اور ڈویژنل ہیڈکوارٹر کے پاس محفوظ ہو چکی ہے۔ پینڈنسی لسٹ سے یہ تاریخ خودکار طور پر خارج ہو چکی ہے۔
+            </p>
+            {onViewPending && (
+              <button
+                type="button"
+                onClick={onViewPending}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-xs transition-all"
+              >
+                Check Pending List
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Error & Success Banners */}
       {errorMessage && (
         <div className="mb-6 bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg flex items-start space-x-3 text-xs">
           <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold">Validation Error</p>
+            <p className="font-bold">Validation / Cloud Error</p>
             <p className="mt-0.5">{errorMessage}</p>
           </div>
         </div>
       )}
 
-      {successMessage && (
+      {successMessage && !submissionReceipt && (
         <div className="mb-6 bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg flex items-start space-x-3 text-xs">
           <CheckCircle2 className="w-5 h-5 text-[#006633] shrink-0 mt-0.5" />
           <div>
@@ -285,6 +427,37 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
           </div>
         </div>
       )}
+
+      {/* Live Status Card for Selected Office & Date */}
+      <div className="mb-6 p-3.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-all bg-white border-gray-200 shadow-xs">
+        <div className="flex items-center space-x-2.5">
+          <Calendar className="w-4 h-4 text-gray-500 shrink-0" />
+          <div>
+            <span className="font-bold text-gray-800">
+              Selected Target: <span className="font-mono text-gray-900">{formatDatePK(date)}</span>
+            </span>
+            <span className="text-gray-500 block text-[11px]">
+              Office: <strong className="text-gray-700">{selectedOfficeName || 'Not Selected'}</strong>
+            </span>
+          </div>
+        </div>
+
+        {existingReportForSelected ? (
+          <div className="bg-emerald-50 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-md flex items-center space-x-2 text-[11px] font-bold">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              رپورٹ موصول شدہ (Recorded in Cloud). دوبارہ جمع کروانے سے ریکارڈ اپ ڈیٹ ہو گا۔
+            </span>
+          </div>
+        ) : (
+          <div className="bg-amber-50 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-md flex items-center space-x-2 text-[11px] font-bold">
+            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              غیر موصولہ / پینڈنگ (Pending for {formatDatePK(date)}). براہ کرم رپورٹ جمع کروائیں۔
+            </span>
+          </div>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Date & Post Office Selection */}
@@ -308,6 +481,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
               type="date"
               value={date}
               min={SYSTEM_LAUNCH_DATE}
+              max={today}
               onChange={(e) => {
                 const newDate = e.target.value;
                 setDate(newDate);
@@ -315,7 +489,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
                   setRemarks('Sunday Holiday / Closed');
                 }
               }}
-              disabled={Boolean(editingReport)}
+              disabled={Boolean(editingReport) || isSubmitting}
               className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
               required
             />
@@ -475,10 +649,20 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         <div className="flex items-center justify-end space-x-3 border-t border-gray-200 pt-4">
           <button
             type="submit"
-            className="bg-[#005522] hover:bg-[#00401A] text-white text-xs font-bold px-6 py-2.5 rounded-lg transition-all shadow-xs flex items-center space-x-2"
+            disabled={isSubmitting}
+            className="bg-[#005522] hover:bg-[#00401A] disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-xs font-bold px-6 py-2.5 rounded-lg transition-all shadow-xs flex items-center space-x-2"
           >
-            <Save className="w-4 h-4" />
-            <span>{editingReport ? 'Update Daily Report' : 'Submit Today\'s Report'}</span>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Saving to Cloud Database... براہ کرم انتظار فرمائیں</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>{editingReport ? 'Update Daily Report' : 'Submit Today\'s Report'}</span>
+              </>
+            )}
           </button>
         </div>
       </form>

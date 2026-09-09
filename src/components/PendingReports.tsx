@@ -11,6 +11,7 @@ import {
   getHolidayReason,
   isClosedOrHoliday,
   getDayOfWeek,
+  normalizeDateToIso,
   SYSTEM_LAUNCH_DATE,
 } from '../utils/calculations';
 import {
@@ -71,6 +72,8 @@ interface BroadcastItem {
   errorDetails?: string;
 }
 
+type FilterMode = 'SELECTED_DATE_ONLY' | 'ALL_PENDING' | 'PREVIOUS_BACKLOG_ONLY' | 'MULTI_DATE_ONLY';
+
 export const PendingReports: React.FC<PendingReportsProps> = ({
   postOffices,
   reports,
@@ -84,40 +87,72 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   const validReports = cleanAndFilterReports(reports);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState<'ALL_PENDING' | 'MULTI_DATE_ONLY'>('ALL_PENDING');
+  const [filterMode, setFilterMode] = useState<FilterMode>('SELECTED_DATE_ONLY');
 
-  const isSelectedDateSunday = isSunday(selectedDate);
-  const isSelectedDateHoliday = isHoliday(selectedDate);
-  const holidayReason = getHolidayReason(selectedDate);
+  const normOffice = (name: string) => String(name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  const isoSelected = normalizeDateToIso(selectedDate) || selectedDate;
+  const isSelectedDateSunday = isSunday(isoSelected);
+  const isSelectedDateHoliday = isHoliday(isoSelected);
+  const holidayReason = getHolidayReason(isoSelected);
   const isClosedDay = isSelectedDateSunday || isSelectedDateHoliday;
-  const isPreLaunchDate = selectedDate < SYSTEM_LAUNCH_DATE || selectedDate === '2026-07-29';
+  const isPreLaunchDate = isoSelected < SYSTEM_LAUNCH_DATE || isoSelected === '2026-07-29';
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
-  const dateReports = validReports.filter((r) => r.date === selectedDate);
-  const submittedOfficeNames = new Set(dateReports.map((r) => r.officeName));
+
+  // Filter reports submitted specifically for selectedDate (excluding placeholder or unsubmitted entries)
+  const dateReports = validReports.filter(
+    (r) =>
+      (normalizeDateToIso(r.date) || r.date) === isoSelected &&
+      r.submittedBy !== 'NOT_SUBMITTED' &&
+      !r.remarks?.includes('Report not submitted')
+  );
+  const submittedOfficeKeys = new Set(dateReports.map((r) => normOffice(r.officeName)));
 
   const pendingList = isPreLaunchDate
     ? []
     : activeOffices
         .map((office) => {
+          const officeKey = normOffice(office.name);
           const pastReports = validReports
-            .filter((r) => r.officeName === office.name)
+            .filter((r) => normOffice(r.officeName) === officeKey)
             .sort((a, b) => (a.date > b.date ? -1 : 1));
 
-          const missingDates = getMissingDatesForOffice(office.name, selectedDate, validReports);
-          const isMissingToday = !isClosedDay && !submittedOfficeNames.has(office.name);
+          const allMissingDates = getMissingDatesForOffice(office.name, isoSelected, validReports);
+          const isSubmittedSelectedDate = submittedOfficeKeys.has(officeKey);
+          const isMissingSelectedDate = !isClosedDay && !isSubmittedSelectedDate;
+
+          // Missing dates strictly prior to selectedDate
+          const priorMissingDates = allMissingDates.filter((d) => d !== isoSelected);
+
+          // Full effective missing dates: if submitted on selectedDate, selectedDate is NEVER included
+          const effectiveMissingDates = isMissingSelectedDate
+            ? Array.from(new Set([...priorMissingDates, isoSelected])).sort()
+            : priorMissingDates;
 
           return {
             office,
             lastReportDate: pastReports.length > 0 ? pastReports[0].date : undefined,
-            missingDates,
-            isMissingToday,
+            missingDates: effectiveMissingDates,
+            isSubmittedSelectedDate,
+            isMissingSelectedDate,
+            priorMissingDates,
           };
         })
-        .filter((item) => (isClosedDay ? item.missingDates.length > 0 : item.isMissingToday || item.missingDates.length > 0))
+        .filter((item) => item.missingDates.length > 0)
         .sort((a, b) => a.office.name.localeCompare(b.office.name, undefined, { sensitivity: 'base', numeric: true }));
+
+  // Separate counts for each view tab
+  const pendingSelectedDateCount = pendingList.filter((item) => item.isMissingSelectedDate).length;
+  const previousBacklogCount = pendingList.filter((item) => item.isSubmittedSelectedDate && item.priorMissingDates.length > 0).length;
+  const multiDateCount = pendingList.filter((item) => item.missingDates.length > 1).length;
 
   // Filter based on search & view mode
   const filteredPendingList = pendingList.filter((item) => {
+    if (filterMode === 'SELECTED_DATE_ONLY' && !item.isMissingSelectedDate) {
+      return false;
+    }
+    if (filterMode === 'PREVIOUS_BACKLOG_ONLY' && (!item.isSubmittedSelectedDate || item.priorMissingDates.length === 0)) {
+      return false;
+    }
     if (filterMode === 'MULTI_DATE_ONLY' && item.missingDates.length <= 1) {
       return false;
     }
@@ -132,7 +167,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
 
   // Total missing reports count across all pending offices
   const totalPendingReportsCount = pendingList.reduce(
-    (sum, item) => sum + (item.missingDates.length > 0 ? item.missingDates.length : 1),
+    (sum, item) => sum + item.missingDates.length,
     0
   );
 
@@ -427,10 +462,10 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
         </div>
 
         <div className="bg-white border border-emerald-200 bg-emerald-50/20 p-3.5 rounded-lg shadow-xs">
-          <p className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Submitted Today</p>
+          <p className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Submitted for Selected Date</p>
           <div className="flex items-center justify-between mt-1">
             <span className="text-2xl font-black text-[#006633]">
-              {isClosedDay ? activeOffices.length : Math.max(0, activeOffices.length - pendingList.filter((p) => p.isMissingToday).length)}
+              {isClosedDay ? activeOffices.length : Math.max(0, activeOffices.length - pendingSelectedDateCount)}
             </span>
             <CheckCircle2 className="w-5 h-5 text-[#006633]" />
           </div>
@@ -442,10 +477,10 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
         </div>
 
         <div className="bg-white border border-red-200 bg-red-50/20 p-3.5 rounded-lg shadow-xs">
-          <p className="text-[10px] text-red-800 font-bold uppercase tracking-wider">Pending Offices Today</p>
+          <p className="text-[10px] text-red-800 font-bold uppercase tracking-wider">Pending for Selected Date</p>
           <div className="flex items-center justify-between mt-1">
             <span className="text-2xl font-black text-red-600">
-              {isClosedDay ? 0 : pendingList.filter((p) => p.isMissingToday).length}
+              {isClosedDay ? 0 : pendingSelectedDateCount}
             </span>
             <Clock className="w-5 h-5 text-red-600" />
           </div>
@@ -517,27 +552,69 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
           )}
         </div>
 
-        <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
-          <span className="text-xs text-gray-500 font-medium">Filter:</span>
+        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-end">
+          <button
+            onClick={() => setFilterMode('SELECTED_DATE_ONLY')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer flex items-center space-x-1.5 ${
+              filterMode === 'SELECTED_DATE_ONLY'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <span>{formatDatePK(selectedDate)} Pending</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+              filterMode === 'SELECTED_DATE_ONLY' ? 'bg-white/25 text-white' : 'bg-red-100 text-red-700 font-bold'
+            }`}>
+              {pendingSelectedDateCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setFilterMode('PREVIOUS_BACKLOG_ONLY')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer flex items-center space-x-1.5 ${
+              filterMode === 'PREVIOUS_BACKLOG_ONLY'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <span>Previous Backlog</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+              filterMode === 'PREVIOUS_BACKLOG_ONLY' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-800 font-bold'
+            }`}>
+              {previousBacklogCount}
+            </span>
+          </button>
+
           <button
             onClick={() => setFilterMode('ALL_PENDING')}
-            className={`px-3 py-1 text-xs font-bold rounded-md transition-colors cursor-pointer ${
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer flex items-center space-x-1.5 ${
               filterMode === 'ALL_PENDING'
-                ? 'bg-gray-900 text-white'
+                ? 'bg-gray-900 text-white shadow-xs'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            All Pending ({pendingList.length})
+            <span>All Pending</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+              filterMode === 'ALL_PENDING' ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-800 font-bold'
+            }`}>
+              {pendingList.length}
+            </span>
           </button>
+
           <button
             onClick={() => setFilterMode('MULTI_DATE_ONLY')}
-            className={`px-3 py-1 text-xs font-bold rounded-md transition-colors cursor-pointer ${
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer flex items-center space-x-1.5 ${
               filterMode === 'MULTI_DATE_ONLY'
-                ? 'bg-red-600 text-white'
+                ? 'bg-red-900 text-white shadow-xs'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            Multi-Date Pending ({pendingList.filter((p) => p.missingDates.length > 1).length})
+            <span>Multi-Date</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+              filterMode === 'MULTI_DATE_ONLY' ? 'bg-white/25 text-white' : 'bg-red-100 text-red-800 font-bold'
+            }`}>
+              {multiDateCount}
+            </span>
           </button>
         </div>
       </div>
@@ -598,7 +675,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                   );
 
                   return (
-                    <tr key={item.office.id ? `${item.office.id}_${item.office.name}` : `pending-po-${idx}`} className="hover:bg-red-50/30 transition-colors">
+                    <tr key={item.office.id ? `${item.office.id}_${item.office.name}` : `pending-po-${idx}`} className="hover:bg-gray-50/60 transition-colors">
                       <td className="p-3 text-gray-400 font-mono font-bold">{idx + 1}</td>
                       <td className="p-3 font-extrabold text-gray-900">
                         <div className="flex items-center space-x-2">
@@ -623,43 +700,69 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-black ${
                             item.missingDates.length > 1
                               ? 'bg-red-100 text-red-800 border border-red-300 animate-pulse'
-                              : 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : item.isSubmittedSelectedDate
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : 'bg-red-100 text-red-800 border border-red-300'
                           }`}
                         >
-                          {item.missingDates.length > 0 ? item.missingDates.length : 1}
+                          {item.missingDates.length}
                         </span>
                       </td>
                       <td className="p-3">
-                        {item.missingDates.length > 1 ? (
+                        {item.isSubmittedSelectedDate ? (
+                          <div className="space-y-1">
+                            <div className="inline-flex items-center text-[10.5px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded">
+                              ✓ {formatDatePK(selectedDate)} Recorded (موصول)
+                            </div>
+                            {item.priorMissingDates.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1 mt-1">
+                                <span className="text-[10px] text-amber-800 font-bold">Prior Missing:</span>
+                                {item.priorMissingDates.map((d) => (
+                                  <span
+                                    key={d}
+                                    className="bg-amber-50 text-amber-900 border border-amber-300 text-[9.5px] px-1.5 py-0.5 rounded font-mono font-bold"
+                                  >
+                                    {formatDatePK(d)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
                           <div className="space-y-1 max-w-xs">
                             <div className="flex flex-wrap gap-1">
-                              {item.missingDates.map((d) => (
-                                <span
-                                  key={d}
-                                  className="bg-red-50 text-red-700 border border-red-200 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold"
-                                >
-                                  {formatDatePK(d)}
-                                </span>
-                              ))}
+                              {item.missingDates.map((d) => {
+                                const isCurrent = d === isoSelected;
+                                return (
+                                  <span
+                                    key={d}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                                      isCurrent
+                                        ? 'bg-red-100 text-red-800 border border-red-300 font-black'
+                                        : 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    }`}
+                                  >
+                                    {formatDatePK(d)} {isCurrent ? '(Today)' : ''}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </div>
-                        ) : item.missingDates.length === 1 ? (
-                          <span className="text-gray-800 font-mono font-semibold text-xs">
-                            {formatDatePK(item.missingDates[0])}
-                          </span>
-                        ) : (
-                          <span className="text-gray-800 font-mono font-semibold text-xs">
-                            {formatDatePK(selectedDate)}
-                          </span>
                         )}
                       </td>
                       <td className="p-3 text-gray-500 font-mono text-[11px]">
                         {item.lastReportDate ? formatDatePK(item.lastReportDate) : <span className="text-red-500 font-bold">No Record</span>}
                       </td>
                       <td className="p-3 text-center">
-                        <span className="bg-red-50 text-red-700 border border-red-200 text-[9.5px] px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                          PENDING
-                        </span>
+                        {item.isSubmittedSelectedDate ? (
+                          <span className="bg-amber-50 text-amber-800 border border-amber-300 text-[9.5px] px-2 py-0.5 rounded font-black uppercase tracking-wider">
+                            PRIOR BACKLOG
+                          </span>
+                        ) : (
+                          <span className="bg-red-50 text-red-700 border border-red-200 text-[9.5px] px-2 py-0.5 rounded font-black uppercase tracking-wider">
+                            PENDING
+                          </span>
+                        )}
                       </td>
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
@@ -708,10 +811,10 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                             href={directLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#006633] rounded-md border border-emerald-300 transition-colors"
-                            title="Open in WhatsApp Web"
+                            className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md border border-gray-300 transition-colors"
+                            title="Open in WhatsApp Web Directly"
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-3.5 h-3.5 text-gray-600" />
                           </a>
                         </div>
                       </td>
