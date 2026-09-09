@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from '../types';
-import { LogOut, ShieldCheck, Calendar, Bell, Lock, RefreshCw, Smartphone, Download } from 'lucide-react';
+import { LogOut, ShieldCheck, Calendar, Bell, Lock, RefreshCw } from 'lucide-react';
 import { formatDatePK, getTodayDateString } from '../utils/calculations';
 
 interface HeaderProps {
@@ -13,8 +13,6 @@ interface HeaderProps {
   onToggleAutoRefresh: () => void;
   onManualRefresh: () => void;
   lastRefreshedAt?: Date | null;
-  onSwitchToUserApp?: () => void;
-  onOpenDownloadApp?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -27,8 +25,6 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleAutoRefresh,
   onManualRefresh,
   lastRefreshedAt,
-  onSwitchToUserApp,
-  onOpenDownloadApp,
 }) => {
   const todayStr = getTodayDateString();
   const isAdmin = currentUser?.role === 'ADMIN';
@@ -131,31 +127,6 @@ export const Header: React.FC<HeaderProps> = ({
                   </p>
                 </div>
               </div>
-            )}
-
-            {/* Download APK Button */}
-            {onOpenDownloadApp && (
-              <button
-                type="button"
-                onClick={onOpenDownloadApp}
-                className="flex items-center space-x-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-md font-bold border border-emerald-500 shadow-xs transition-colors cursor-pointer"
-                title="Download Android APK / App for Mobile"
-              >
-                <Download className="w-3.5 h-3.5 text-yellow-300" />
-                <span>Download APK</span>
-              </button>
-            )}
-
-            {/* User Mobile App View Button */}
-            {onSwitchToUserApp && (
-              <button
-                onClick={onSwitchToUserApp}
-                className="flex items-center space-x-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 text-xs px-2.5 py-1.5 rounded-md font-bold shadow-xs transition-colors cursor-pointer"
-                title="Switch to User Mobile App (AdMob)"
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">User Mobile App</span>
-              </button>
             )}
 
             {/* Admin Login Button OR Logout Button */}
