@@ -11,15 +11,25 @@ export const DEFAULT_ADMOB_CONFIG: AdMobConfig = {
   interstitialEnabled: true,
 };
 
+type ConfigListener = (config: AdMobConfig) => void;
+const listeners: Set<ConfigListener> = new Set();
+
 let activeAdMobConfig: AdMobConfig = (() => {
   if (typeof window !== 'undefined') {
     try {
-      const saved = localStorage.getItem('pakpost_admob_config');
+      const saved = localStorage.getItem('pakpost_admob_config') || localStorage.getItem('pakpost_admob_config_permanent');
       if (saved) {
-        return { ...DEFAULT_ADMOB_CONFIG, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_ADMOB_CONFIG,
+          ...parsed,
+          appId: parsed.appId || DEFAULT_ADMOB_CONFIG.appId,
+          bannerAdUnitId: parsed.bannerAdUnitId || DEFAULT_ADMOB_CONFIG.bannerAdUnitId,
+          interstitialAdUnitId: parsed.interstitialAdUnitId || DEFAULT_ADMOB_CONFIG.interstitialAdUnitId,
+        };
       }
     } catch (e) {
-      // ignore
+      console.warn('Could not parse saved AdMob config:', e);
     }
   }
   return { ...DEFAULT_ADMOB_CONFIG };
@@ -29,15 +39,56 @@ export function getAdMobConfig(): AdMobConfig {
   return activeAdMobConfig;
 }
 
+export function subscribeToLocalAdMobConfig(listener: ConfigListener): () => void {
+  listeners.add(listener);
+  listener(activeAdMobConfig);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export function updateAdMobConfig(newConfig: Partial<AdMobConfig>): AdMobConfig {
-  activeAdMobConfig = { ...activeAdMobConfig, ...newConfig };
+  // Guard: NEVER overwrite valid custom IDs with empty strings or undefined
+  const cleaned: Partial<AdMobConfig> = {};
+  if (newConfig.appId && typeof newConfig.appId === 'string' && newConfig.appId.trim().length > 0) {
+    cleaned.appId = newConfig.appId.trim();
+  }
+  if (newConfig.bannerAdUnitId && typeof newConfig.bannerAdUnitId === 'string' && newConfig.bannerAdUnitId.trim().length > 0) {
+    cleaned.bannerAdUnitId = newConfig.bannerAdUnitId.trim();
+  }
+  if (newConfig.interstitialAdUnitId && typeof newConfig.interstitialAdUnitId === 'string' && newConfig.interstitialAdUnitId.trim().length > 0) {
+    cleaned.interstitialAdUnitId = newConfig.interstitialAdUnitId.trim();
+  }
+  if (typeof newConfig.testMode === 'boolean') {
+    cleaned.testMode = newConfig.testMode;
+  }
+  if (typeof newConfig.bannerEnabled === 'boolean') {
+    cleaned.bannerEnabled = newConfig.bannerEnabled;
+  }
+  if (typeof newConfig.interstitialEnabled === 'boolean') {
+    cleaned.interstitialEnabled = newConfig.interstitialEnabled;
+  }
+
+  activeAdMobConfig = { ...activeAdMobConfig, ...cleaned };
+
   if (typeof window !== 'undefined') {
     try {
-      localStorage.setItem('pakpost_admob_config', JSON.stringify(activeAdMobConfig));
+      const serialized = JSON.stringify(activeAdMobConfig);
+      localStorage.setItem('pakpost_admob_config', serialized);
+      localStorage.setItem('pakpost_admob_config_permanent', serialized);
     } catch (e) {
       // ignore
     }
   }
+
+  listeners.forEach((fn) => {
+    try {
+      fn(activeAdMobConfig);
+    } catch (e) {
+      // ignore
+    }
+  });
+
   return activeAdMobConfig;
 }
 
@@ -85,7 +136,6 @@ export function triggerNativeOrWebInterstitial(onCompleted?: () => void): boolea
     return false;
   }
 
-  // If running inside Android WebView with native AdMob SDK bridge
   if (window.AndroidAdMob && typeof window.AndroidAdMob.showInterstitial === 'function') {
     try {
       window.AndroidAdMob.showInterstitial();

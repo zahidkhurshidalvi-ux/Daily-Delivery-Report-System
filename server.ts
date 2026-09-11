@@ -13,11 +13,15 @@ async function startServer() {
   });
 
   // Dedicated route to serve real signed Android APK
-  app.get(["/PakistanPost_DDRS.apk", "/PakistanPost_DeliveryReport.apk", "/download/apk"], (req, res) => {
+  app.get(["/PakistanPost_DDRS.apk", "/PakistanPost_DeliveryReport.apk", "/download/apk", "/app.apk"], (req, res) => {
     const apkFile = path.join(process.cwd(), "public", "PakistanPost_DDRS.apk");
-    res.setHeader("Content-Disposition", 'attachment; filename="PakistanPost_DDRS.apk"');
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", "application/vnd.android.package-archive");
-    res.sendFile(apkFile);
+    res.download(apkFile, "PakistanPost_DDRS.apk", (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).send("APK download error");
+      }
+    });
   });
 
   // Dedicated route specifically for /sw.js to guarantee valid JS MIME type

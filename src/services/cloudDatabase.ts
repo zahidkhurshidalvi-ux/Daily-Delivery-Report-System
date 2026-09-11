@@ -278,8 +278,28 @@ export async function saveAppConfigToCloud(configs: {
       },
       { merge: true }
     );
+    // If adMobConfig is included, also write to dedicated permanent document
+    if (configs.adMobConfig) {
+      const admobRef = doc(db, APP_CONFIG_COL, 'admob_settings');
+      await setDoc(admobRef, { ...configs.adMobConfig, updatedAt: new Date().toISOString() }, { merge: true });
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${APP_CONFIG_COL}/global_settings`);
+  }
+}
+
+/**
+ * Save dedicated AdMob Config to Cloud Firestore (Permanent)
+ */
+export async function saveAdMobConfigToCloud(config: AdMobConfig): Promise<void> {
+  const admobRef = doc(db, APP_CONFIG_COL, 'admob_settings');
+  const globalRef = doc(db, APP_CONFIG_COL, 'global_settings');
+  try {
+    const payload = { ...config, updatedAt: new Date().toISOString() };
+    await setDoc(admobRef, payload, { merge: true });
+    await setDoc(globalRef, { adMobConfig: config, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${APP_CONFIG_COL}/admob_settings`);
   }
 }
 
@@ -295,6 +315,22 @@ export function subscribeToAppConfig(
   }) => void
 ) {
   const docRef = doc(db, APP_CONFIG_COL, 'global_settings');
+  const admobRef = doc(db, APP_CONFIG_COL, 'admob_settings');
+
+  // Also listen to dedicated admob_settings
+  onSnapshot(
+    admobRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && (data.appId || data.bannerAdUnitId || data.interstitialAdUnitId)) {
+          onUpdate({ adMobConfig: data as AdMobConfig });
+        }
+      }
+    },
+    (err) => console.warn('AdMob dedicated listener:', err)
+  );
+
   return onSnapshot(
     docRef,
     (docSnap) => {

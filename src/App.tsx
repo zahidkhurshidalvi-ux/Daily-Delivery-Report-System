@@ -27,6 +27,7 @@ import {
   saveDailyReportToCloud,
   deleteDailyReportFromCloud,
   saveAppConfigToCloud,
+  saveAdMobConfigToCloud,
   subscribeToAppConfig,
   subscribeToHolidays,
 } from './services/cloudDatabase';
@@ -687,8 +688,8 @@ export default function App() {
               onRunTriggerManually={handleRunTrigger}
               onShowInterstitialTest={() => setShowInterstitial(true)}
               onSaveAdMobToCloud={async (adMobConfig) => {
-                await saveAppConfigToCloud({ adMobConfig });
-                logAction('ADMOB_CONFIG_UPDATE', 'Google AdMob App & Ad Unit IDs saved to cloud', 'SUCCESS');
+                await saveAdMobConfigToCloud(adMobConfig);
+                logAction('ADMOB_CONFIG_UPDATE', 'Google AdMob App & Ad Unit IDs saved permanently to cloud database', 'SUCCESS');
               }}
             />
           )}

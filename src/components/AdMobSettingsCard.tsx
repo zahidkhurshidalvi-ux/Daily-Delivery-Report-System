@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AdMobConfig } from '../types';
-import { DEFAULT_ADMOB_CONFIG, getAdMobConfig, updateAdMobConfig } from '../utils/admob';
+import { DEFAULT_ADMOB_CONFIG, getAdMobConfig, updateAdMobConfig, subscribeToLocalAdMobConfig } from '../utils/admob';
 import { Sparkles, Save, CheckCircle2, Play, Shield, RefreshCw } from 'lucide-react';
 
 interface AdMobSettingsCardProps {
@@ -20,6 +20,18 @@ export const AdMobSettingsCard: React.FC<AdMobSettingsCardProps> = ({
   const [bannerEnabled, setBannerEnabled] = useState(current.bannerEnabled);
   const [interstitialEnabled, setInterstitialEnabled] = useState(current.interstitialEnabled);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToLocalAdMobConfig((cfg) => {
+      setAppId(cfg.appId);
+      setBannerId(cfg.bannerAdUnitId);
+      setInterstitialId(cfg.interstitialAdUnitId);
+      setTestMode(cfg.testMode);
+      setBannerEnabled(cfg.bannerEnabled);
+      setInterstitialEnabled(cfg.interstitialEnabled);
+    });
+    return () => unsub();
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
