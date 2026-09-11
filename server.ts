@@ -20,6 +20,25 @@ async function startServer() {
     res.sendFile(apkFile);
   });
 
+  // Dedicated route specifically for /sw.js to guarantee valid JS MIME type
+  app.get("/sw.js", (req, res) => {
+    const swFile = path.join(process.cwd(), "public", "sw.js");
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.setHeader("Service-Worker-Allowed", "/");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(swFile);
+  });
+
+  // Dedicated route for manifest.json
+  app.get("/manifest.json", (req, res) => {
+    const manifestFile = path.join(process.cwd(), "public", "manifest.json");
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.sendFile(manifestFile);
+  });
+
+  // Serve static assets from public folder
+  app.use(express.static(path.join(process.cwd(), "public")));
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

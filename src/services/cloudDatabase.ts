@@ -8,7 +8,7 @@ import {
   getDocs,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { PostOffice, DailyReport, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig, OfficialHoliday } from '../types';
+import { PostOffice, DailyReport, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig, OfficialHoliday, AdMobConfig } from '../types';
 import { cleanAndFilterPostOffices, cleanAndFilterReports, SYSTEM_LAUNCH_DATE, setInMemoryHolidays } from '../utils/calculations';
 
 const POST_OFFICES_COL = 'postOffices';
@@ -266,6 +266,7 @@ export async function saveAppConfigToCloud(configs: {
   whatsAppConfig?: WhatsAppConfig;
   triggerConfig?: TriggerConfig;
   googleSheetsConfig?: GoogleSheetsConfig;
+  adMobConfig?: AdMobConfig;
 }): Promise<void> {
   const docRef = doc(db, APP_CONFIG_COL, 'global_settings');
   try {
@@ -290,6 +291,7 @@ export function subscribeToAppConfig(
     whatsAppConfig?: WhatsAppConfig;
     triggerConfig?: TriggerConfig;
     googleSheetsConfig?: GoogleSheetsConfig;
+    adMobConfig?: AdMobConfig;
   }) => void
 ) {
   const docRef = doc(db, APP_CONFIG_COL, 'global_settings');

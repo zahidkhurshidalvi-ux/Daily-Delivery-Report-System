@@ -23,6 +23,7 @@ import {
   Calendar,
   Clock,
 } from 'lucide-react';
+import { AdMobBanner } from './AdMobBanner';
 
 interface DailyReportFormProps {
   currentUser: User | null;
@@ -32,6 +33,7 @@ interface DailyReportFormProps {
   editingReport?: DailyReport | null;
   onCancelEdit?: () => void;
   onViewPending?: () => void;
+  onShowInterstitial?: () => void;
 }
 
 export const DailyReportForm: React.FC<DailyReportFormProps> = ({
@@ -42,6 +44,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
   editingReport,
   onCancelEdit,
   onViewPending,
+  onShowInterstitial,
 }) => {
   const today = getTodayDateString();
 
@@ -311,6 +314,13 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         setMissent('');
         setDeposit('');
         setRemarks('');
+      }
+
+      // Trigger interstitial ad after submission if enabled
+      if (onShowInterstitial) {
+        setTimeout(() => {
+          onShowInterstitial();
+        }, 1200);
       }
     } catch (err: any) {
       console.error('Submission error:', err);
@@ -733,6 +743,9 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
           </button>
         </div>
       </form>
+
+      {/* Google AdMob Compliant Banner Placement */}
+      <AdMobBanner position="inline" className="mt-6 pt-3 border-t border-gray-100" />
     </div>
   );
 };

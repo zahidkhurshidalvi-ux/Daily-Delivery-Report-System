@@ -21,33 +21,38 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then((registration) => {
-            // Check for updates on focus and periodically so app is always up to date
-            setInterval(() => {
-              registration.update();
-            }, 60 * 1000);
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then((registration) => {
+              setInterval(() => {
+                try {
+                  registration.update();
+                } catch (e) {}
+              }, 60 * 1000);
 
-            document.addEventListener('visibilitychange', () => {
-              if (document.visibilityState === 'visible') {
-                registration.update();
-              }
-            });
+              document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                  try {
+                    registration.update();
+                  } catch (e) {}
+                }
+              });
 
-            registration.addEventListener('updatefound', () => {
-              const newWorker = registration.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    newWorker.postMessage({ type: 'SKIP_WAITING' });
-                  }
-                });
-              }
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                  });
+                }
+              });
+            })
+            .catch((err) => {
+              console.warn('ServiceWorker registration note:', err);
             });
-          }).catch(err => {
-            console.log('SW registration note:', err);
-          });
 
           let refreshing = false;
           navigator.serviceWorker.addEventListener('controllerchange', () => {
