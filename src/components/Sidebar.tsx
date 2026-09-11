@@ -11,8 +11,6 @@ import {
   ScrollText,
   AlertTriangle,
   CalendarOff,
-  Smartphone,
-  Download,
 } from 'lucide-react';
 
 export type NavTab =
@@ -34,7 +32,6 @@ interface SidebarProps {
   userRole: UserRole | 'PUBLIC';
   pendingCount: number;
   onOpenAdminLogin: () => void;
-  onOpenApkDownload?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -42,7 +39,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   userRole,
   pendingCount,
-  onOpenApkDownload,
 }) => {
   // When Admin is logged in: Dashboard is at the very TOP
   // When Public/Office user: Submit Daily Report is at the top
@@ -69,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon: AlertTriangle,
             role: 'ADMIN',
           },
-          { id: 'whatsapp-triggers', label: 'WhatsApp & AdMob IDs', icon: MessageSquare, role: 'ADMIN' },
+          { id: 'whatsapp-triggers', label: 'WhatsApp & Triggers', icon: MessageSquare, role: 'ADMIN' },
           { id: 'logs', label: 'System Audit Logs', icon: ScrollText, role: 'ADMIN' },
         ]
       : [
@@ -127,22 +123,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
       </div>
-
-      {onOpenApkDownload && (
-        <div className="p-3 border-t border-[#005522]">
-          <button
-            type="button"
-            onClick={onOpenApkDownload}
-            className="w-full bg-[#005522] hover:bg-[#006633] text-white p-2.5 rounded-lg text-xs font-bold flex items-center justify-between shadow-xs transition-colors cursor-pointer border border-yellow-400/20"
-          >
-            <div className="flex items-center space-x-2">
-              <Smartphone className="w-4 h-4 text-yellow-400" />
-              <span className="text-left">Android App (APK)</span>
-            </div>
-            <Download className="w-3.5 h-3.5 text-yellow-300" />
-          </button>
-        </div>
-      )}
     </aside>
   );
 };

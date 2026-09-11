@@ -12,18 +12,6 @@ async function startServer() {
     res.json({ status: "ok", service: "Daily Delivery Reporting System", timestamp: new Date().toISOString() });
   });
 
-  // Dedicated route to serve real signed Android APK
-  app.get(["/PakistanPost_DDRS.apk", "/PakistanPost_DeliveryReport.apk", "/download/apk", "/app.apk"], (req, res) => {
-    const apkFile = path.join(process.cwd(), "public", "PakistanPost_DDRS.apk");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Type", "application/vnd.android.package-archive");
-    res.download(apkFile, "PakistanPost_DDRS.apk", (err) => {
-      if (err && !res.headersSent) {
-        res.status(500).send("APK download error");
-      }
-    });
-  });
-
   // Dedicated route specifically for /sw.js to guarantee valid JS MIME type
   app.get("/sw.js", (req, res) => {
     const swFile = path.join(process.cwd(), "public", "sw.js");

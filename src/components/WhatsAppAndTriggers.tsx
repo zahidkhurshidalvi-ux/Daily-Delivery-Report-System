@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { WhatsAppConfig, TriggerConfig, AdMobConfig } from '../types';
-import { AdMobSettingsCard } from './AdMobSettingsCard';
+import { WhatsAppConfig, TriggerConfig } from '../types';
 import {
   MessageSquare,
   Clock,
@@ -18,8 +17,6 @@ interface WhatsAppAndTriggersProps {
   triggerConfig: TriggerConfig;
   onSaveWhatsApp: (config: WhatsAppConfig) => void;
   onRunTriggerManually: (triggerType: 'REMINDER_5PM' | 'BACKUP_1159PM' | 'ROLLOVER_1205AM') => void;
-  onShowInterstitialTest?: () => void;
-  onSaveAdMobToCloud?: (config: AdMobConfig) => Promise<void> | void;
 }
 
 export const WhatsAppAndTriggers: React.FC<WhatsAppAndTriggersProps> = ({
@@ -27,8 +24,6 @@ export const WhatsAppAndTriggers: React.FC<WhatsAppAndTriggersProps> = ({
   triggerConfig,
   onSaveWhatsApp,
   onRunTriggerManually,
-  onShowInterstitialTest,
-  onSaveAdMobToCloud,
 }) => {
   const [phoneNumberId, setPhoneNumberId] = useState(whatsAppConfig.phoneNumberId);
   const [accessToken, setAccessToken] = useState(whatsAppConfig.accessToken);
@@ -231,12 +226,6 @@ export const WhatsAppAndTriggers: React.FC<WhatsAppAndTriggersProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Google AdMob Configuration & IDs Card */}
-      <AdMobSettingsCard
-        onShowInterstitialTest={onShowInterstitialTest}
-        onSaveToCloud={onSaveAdMobToCloud}
-      />
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from '../types';
-import { LogOut, ShieldCheck, Calendar, Bell, Lock, RefreshCw, Smartphone } from 'lucide-react';
+import { LogOut, ShieldCheck, Calendar, Bell, Lock, RefreshCw } from 'lucide-react';
 import { formatDatePK, getTodayDateString } from '../utils/calculations';
 
 interface HeaderProps {
@@ -13,7 +13,6 @@ interface HeaderProps {
   onToggleAutoRefresh: () => void;
   onManualRefresh: () => void;
   lastRefreshedAt?: Date | null;
-  onOpenApkDownload?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,7 +25,6 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleAutoRefresh,
   onManualRefresh,
   lastRefreshedAt,
-  onOpenApkDownload,
 }) => {
   const todayStr = getTodayDateString();
   const isAdmin = currentUser?.role === 'ADMIN';
@@ -129,19 +127,6 @@ export const Header: React.FC<HeaderProps> = ({
                   </p>
                 </div>
               </div>
-            )}
-
-            {/* Android Mobile App Button */}
-            {onOpenApkDownload && (
-              <button
-                type="button"
-                onClick={onOpenApkDownload}
-                className="hidden sm:flex items-center space-x-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#00401A] border border-emerald-300 text-xs px-2.5 py-1.5 rounded-md font-bold transition-all shadow-2xs cursor-pointer"
-                title="Download Pakistan Post Android Mobile App (APK)"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-emerald-700" />
-                <span className="hidden md:inline">Android App</span>
-              </button>
             )}
 
             {/* Admin Login Button OR Logout Button */}

@@ -27,7 +27,6 @@ import {
   saveDailyReportToCloud,
   deleteDailyReportFromCloud,
   saveAppConfigToCloud,
-  saveAdMobConfigToCloud,
   subscribeToAppConfig,
   subscribeToHolidays,
 } from './services/cloudDatabase';
@@ -45,13 +44,7 @@ import { UserManagement } from './components/UserManagement';
 import { IssueExplanation } from './components/IssueExplanation';
 import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
-import { SplashScreen } from './components/SplashScreen';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
-import { AdMobBanner } from './components/AdMobBanner';
-import { AdMobInterstitial } from './components/AdMobInterstitial';
-import { updateAdMobConfig } from './utils/admob';
-import { MobileBottomNav } from './components/MobileBottomNav';
-import { ApkDownloadModal } from './components/ApkDownloadModal';
 
 // Helper function to merge two post office lists preserving contact numbers and mobile numbers
 function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[]): PostOffice[] {
@@ -100,8 +93,6 @@ export default function App() {
   });
 
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
-  const [showApkModal, setShowApkModal] = useState<boolean>(false);
-  const [showInterstitial, setShowInterstitial] = useState<boolean>(false);
 
   const [postOffices, setPostOffices] = useState<PostOffice[]>(() => {
     const saved = localStorage.getItem('pakpost_offices');
@@ -216,7 +207,6 @@ export default function App() {
     const unsubConfig = subscribeToAppConfig((cfg) => {
       if (cfg.whatsAppConfig) setWhatsAppConfig(cfg.whatsAppConfig);
       if (cfg.triggerConfig) setTriggerConfig(cfg.triggerConfig);
-      if (cfg.adMobConfig) updateAdMobConfig(cfg.adMobConfig);
     });
 
     const unsubHolidays = subscribeToHolidays(() => {
@@ -529,24 +519,9 @@ export default function App() {
         ).length;
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5] text-slate-800 font-sans flex flex-col pb-16 lg:pb-0">
-      {/* Mobile App Splash Screen */}
-      <SplashScreen />
-
+    <div className="min-h-screen bg-[#F0F2F5] text-slate-800 font-sans flex flex-col">
       {/* Network Connectivity & Offline / Online Alert */}
       <NetworkStatusBanner />
-
-      {/* Google AdMob Full-Screen Interstitial Ad Modal */}
-      <AdMobInterstitial
-        isOpen={showInterstitial}
-        onClose={() => setShowInterstitial(false)}
-      />
-
-      {/* Android APK Direct Download & Setup Modal */}
-      <ApkDownloadModal
-        isOpen={showApkModal}
-        onClose={() => setShowApkModal(false)}
-      />
 
       {/* Optional Admin Login Modal */}
       {showAdminLoginModal && (
@@ -569,7 +544,6 @@ export default function App() {
         onToggleAutoRefresh={() => setAutoRefreshEnabled((prev) => !prev)}
         onManualRefresh={handleRefreshData}
         lastRefreshedAt={lastRefreshedAt}
-        onOpenApkDownload={() => setShowApkModal(true)}
       />
 
       {/* Main Body */}
@@ -581,7 +555,6 @@ export default function App() {
           userRole={currentUser ? currentUser.role : 'PUBLIC'}
           pendingCount={pendingCountToday}
           onOpenAdminLogin={() => setShowAdminLoginModal(true)}
-          onOpenApkDownload={() => setShowApkModal(true)}
         />
 
         {/* Content Area */}
@@ -608,7 +581,6 @@ export default function App() {
               onCancelEdit={() => setEditingReport(null)}
               currentUser={currentUser}
               onViewPending={() => setActiveTab('pending-reports')}
-              onShowInterstitial={() => setShowInterstitial(true)}
             />
           )}
 
@@ -686,11 +658,6 @@ export default function App() {
                 saveAppConfigToCloud({ whatsAppConfig: newCfg });
               }}
               onRunTriggerManually={handleRunTrigger}
-              onShowInterstitialTest={() => setShowInterstitial(true)}
-              onSaveAdMobToCloud={async (adMobConfig) => {
-                await saveAdMobConfigToCloud(adMobConfig);
-                logAction('ADMOB_CONFIG_UPDATE', 'Google AdMob App & Ad Unit IDs saved permanently to cloud database', 'SUCCESS');
-              }}
             />
           )}
 
@@ -716,16 +683,6 @@ export default function App() {
           {activeTab === 'logs' && <SystemLogs logs={logs} />}
         </main>
       </div>
-
-      {/* Mobile App Bottom Navigation Bar (Shown on small screens) */}
-      <MobileBottomNav
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        pendingCount={pendingCountToday}
-        onOpenAdminLogin={() => setShowAdminLoginModal(true)}
-        isAdmin={currentUser?.role === 'ADMIN'}
-        onOpenApkDownload={() => setShowApkModal(true)}
-      />
     </div>
   );
 }
