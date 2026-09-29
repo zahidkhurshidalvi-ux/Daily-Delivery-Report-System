@@ -50,14 +50,34 @@ export const URDU_SUMMARY_TEMPLATE = getUrduSummaryTemplate();
 /**
  * Generates a direct WhatsApp web/app link to send a message to a postmaster's phone number
  */
-export function generateWhatsAppWebLink(mobileNumber: string, messageText: string, webAppUrl: string): string {
+export function generateWhatsAppWebLink(
+  mobileNumber: string,
+  messageText: string,
+  webAppUrl?: string,
+  officeName?: string
+): string {
   // Format mobile number to international format e.g. +923001234567 -> 923001234567
   let cleanNumber = mobileNumber.replace(/\D/g, '');
   if (cleanNumber.startsWith('0')) {
     cleanNumber = '92' + cleanNumber.substring(1);
   }
 
-  const fullText = `${messageText}\n\n🌐 System Link:\n${webAppUrl}`;
+  let targetUrl = (webAppUrl || '').trim();
+
+  // If URL is empty, contains dummy placeholder, or points to internal dev URL, convert to public shared link
+  if (!targetUrl || targetUrl.includes('YOUR_APP_ID') || targetUrl.includes('example.com') || targetUrl.includes('ais-dev-')) {
+    if (typeof window !== 'undefined') {
+      const origin = window.location.origin;
+      targetUrl = origin.replace('ais-dev-', 'ais-pre-');
+    }
+  }
+
+  if (officeName && targetUrl && !targetUrl.includes('office=')) {
+    const sep = targetUrl.includes('?') ? '&' : '?';
+    targetUrl = `${targetUrl}${sep}office=${encodeURIComponent(officeName)}`;
+  }
+
+  const fullText = `${messageText}\n\n🌐 Daily Delivery Portal Link:\n${targetUrl}`;
   return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(fullText)}`;
 }
 

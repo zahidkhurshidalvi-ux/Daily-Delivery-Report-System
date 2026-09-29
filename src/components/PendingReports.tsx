@@ -683,7 +683,8 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                   const directLink = generateWhatsAppWebLink(
                     item.office.mobileNumber,
                     `محترم پوسٹ ماسٹر صاحب (${item.office.name})،\n\n` + reminderMsg,
-                    whatsAppConfig.webAppUrl
+                    whatsAppConfig.webAppUrl,
+                    item.office.name
                   );
 
                   return (
@@ -778,20 +779,23 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                       </td>
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
-                          {/* Send WhatsApp Cloud API / Direct */}
-                          <button
-                            onClick={() => handleSendSingleReminder(item.office, item.missingDates)}
-                            disabled={singleSendingId === item.office.id}
-                            className="bg-[#25D366] hover:bg-emerald-600 text-white font-bold text-[10.5px] px-2.5 py-1.5 rounded-md transition-all flex items-center space-x-1 shadow-xs cursor-pointer disabled:opacity-50"
-                            title="Send WhatsApp Reminder"
+                          {/* Direct WhatsApp Web/App Link (Cannot be blocked by popup blocker) */}
+                          <a
+                            href={directLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => {
+                              onLogAction(
+                                'WHATSAPP_REMINDER_CLICKED',
+                                `Opened WhatsApp direct message link for ${item.office.name} (${item.office.mobileNumber})`
+                              );
+                            }}
+                            className="bg-[#25D366] hover:bg-emerald-600 text-white font-bold text-[10.5px] px-2.5 py-1.5 rounded-md transition-all flex items-center space-x-1 shadow-xs cursor-pointer inline-flex items-center"
+                            title={`Send WhatsApp Reminder to ${item.office.name} (${item.office.mobileNumber})`}
                           >
-                            {singleSendingId === item.office.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Send className="w-3 h-3" />
-                            )}
+                            <Send className="w-3 h-3" />
                             <span>WhatsApp</span>
-                          </button>
+                          </a>
 
                           {/* Issue Explanation Call Button */}
                           {onNavigateExplanation && (

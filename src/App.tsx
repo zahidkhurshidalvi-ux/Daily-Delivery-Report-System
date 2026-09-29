@@ -209,13 +209,14 @@ export default function App() {
 
     const unsubOffices = subscribeToPostOffices(
       (cloudOffices) => {
-        if (cloudOffices && cloudOffices.length > 0) {
-          const merged = mergeOfficesPreservingData(postOfficesRef.current, cleanAndFilterPostOffices(cloudOffices));
-          setPostOffices(merged);
-          setLastRefreshedAt(new Date());
-        } else if (postOfficesRef.current.length > 0) {
-          syncAllOfficesToCloud(postOfficesRef.current);
-        }
+        // Cloud Firestore is authoritative. Never merge with stale local data!
+        const cleaned = cleanAndFilterPostOffices(cloudOffices || []);
+        setPostOffices(cleaned);
+        postOfficesRef.current = cleaned;
+        try {
+          localStorage.setItem('pakpost_offices', JSON.stringify(cleaned));
+        } catch {}
+        setLastRefreshedAt(new Date());
       },
       (err) => {
         console.warn('Realtime cloud offices subscription:', err);
@@ -224,10 +225,12 @@ export default function App() {
 
     const unsubReports = subscribeToDailyReports(
       (cloudReports) => {
-        if (cloudReports && cloudReports.length > 0) {
-          setReports(cleanAndFilterReports(cloudReports));
-          setLastRefreshedAt(new Date());
-        }
+        const cleaned = cleanAndFilterReports(cloudReports || []);
+        setReports(cleaned);
+        try {
+          localStorage.setItem('pakpost_reports', JSON.stringify(cleaned));
+        } catch {}
+        setLastRefreshedAt(new Date());
       },
       (err) => {
         console.warn('Realtime cloud reports subscription:', err);
@@ -480,27 +483,45 @@ export default function App() {
     logAction('MASTER_OFFICE_DELETE', `Deleted post office: ${target?.name || officeId}`, 'WARNING');
   };
 
-  const handleBulkImportOffices = (imported: PostOffice[], replaceExisting: boolean) => {
+  const handleBulkImportOffices = async (imported: PostOffice[], replaceExisting: boolean) => {
     const validImported = cleanAndFilterPostOffices(imported);
-    let combined: PostOffice[];
+    let finalOffices: PostOffice[];
     if (replaceExisting) {
-      combined = mergeOfficesPreservingData(postOffices, validImported);
+      // Remove previous offices from cloud if replacing completely
+      const currentList = [...postOffices];
+      for (const po of currentList) {
+        if (!validImported.some((v) => (v.name || '').toLowerCase().trim() === (po.name || '').toLowerCase().trim())) {
+          deletePostOfficeFromCloud(po.id).catch(() => {});
+        }
+      }
+      finalOffices = validImported;
     } else {
-      combined = mergeOfficesPreservingData(postOffices, validImported);
+      finalOffices = mergeOfficesPreservingData(postOffices, validImported);
     }
-    const cleaned = cleanAndFilterPostOffices(combined);
+    const cleaned = cleanAndFilterPostOffices(finalOffices);
     setPostOffices(cleaned);
-    syncAllOfficesToCloud(cleaned);
+    postOfficesRef.current = cleaned;
+    try {
+      localStorage.setItem('pakpost_offices', JSON.stringify(cleaned));
+    } catch {}
+    await syncAllOfficesToCloud(cleaned);
     logAction(
       'MASTER_OFFICE_BULK_IMPORT',
-      `Imported ${validImported.length} offices (${replaceExisting ? 'Updated existing' : 'Appended'}) with preserved contact details.`
+      `Imported ${validImported.length} offices (${replaceExisting ? 'Replaced old offices' : 'Appended to existing'}).`
     );
   };
 
-  const handleClearAllOffices = () => {
-    postOffices.forEach((po) => deletePostOfficeFromCloud(po.id));
+  const handleClearAllOffices = async () => {
+    const listToDelete = [...postOffices];
     setPostOffices([]);
-    logAction('MASTER_OFFICE_CLEAR_ALL', 'Cleared all post offices from master directory', 'WARNING');
+    postOfficesRef.current = [];
+    try {
+      localStorage.removeItem('pakpost_offices');
+    } catch {}
+    for (const po of listToDelete) {
+      await deletePostOfficeFromCloud(po.id).catch(() => {});
+    }
+    logAction('MASTER_OFFICE_CLEAR_ALL', 'Cleared all post offices from master directory and cloud', 'WARNING');
   };
 
   const handleResetDefaultOffices = () => {

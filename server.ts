@@ -20,6 +20,47 @@ async function startServer() {
     res.json({ status: "ok", service: "Daily Delivery Reporting System", timestamp: new Date().toISOString() });
   });
 
+  // Server-side proxy for Google Apps Script Web App webhook requests to bypass CORS
+  app.all("/api/proxy-sheets-webhook", async (req, res) => {
+    try {
+      const targetUrl = (req.query.url as string) || (req.body?.targetUrl as string);
+      if (!targetUrl || !targetUrl.startsWith("https://script.google.com/macros/s/")) {
+        return res.status(400).json({ status: "error", message: "Invalid Google Apps Script URL" });
+      }
+
+      if (req.method === "GET") {
+        const fetchResponse = await fetch(targetUrl, {
+          method: "GET",
+          redirect: "follow",
+        });
+        const text = await fetchResponse.text();
+        try {
+          const json = JSON.parse(text);
+          return res.json(json);
+        } catch {
+          return res.send(text);
+        }
+      } else {
+        const payload = req.body?.payload || req.body;
+        const fetchResponse = await fetch(targetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: typeof payload === "string" ? payload : JSON.stringify(payload),
+          redirect: "follow",
+        });
+        const text = await fetchResponse.text();
+        try {
+          const json = JSON.parse(text);
+          return res.json(json);
+        } catch {
+          return res.send(text);
+        }
+      }
+    } catch (e: any) {
+      res.status(500).json({ status: "error", message: e.message || "Proxy request failed" });
+    }
+  });
+
   // Dedicated route specifically for /sw.js to guarantee valid JS MIME type
   app.get("/sw.js", (req, res) => {
     const swFile = path.join(process.cwd(), "public", "sw.js");

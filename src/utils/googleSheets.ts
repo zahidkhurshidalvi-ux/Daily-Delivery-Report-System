@@ -2035,6 +2035,22 @@ export const testWebhookConnection = async (
     );
   }
 
+  // 1. First try server-side proxy route to bypass browser CORS
+  try {
+    const proxyUrl = `/api/proxy-sheets-webhook?url=${encodeURIComponent(cleanUrl)}`;
+    const resp = await fetch(proxyUrl);
+    if (resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      return {
+        success: true,
+        message: data.message || 'Connected to Google Apps Script Webhook database successfully!',
+      };
+    }
+  } catch (proxyErr) {
+    console.warn('Proxy webhook test error, falling back to direct:', proxyErr);
+  }
+
+  // 2. Direct fetch fallback
   try {
     const resp = await fetch(cleanUrl, {
       method: 'GET',
@@ -2088,6 +2104,24 @@ export const fetchDatabaseViaWebhook = async (
   const cleanUrl = webhookUrl.trim();
   const url = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}action=get_all_database`;
 
+  // 1. Try server-side proxy first to bypass CORS
+  try {
+    const proxyUrl = `/api/proxy-sheets-webhook?url=${encodeURIComponent(url)}`;
+    const proxyResp = await fetch(proxyUrl);
+    if (proxyResp.ok) {
+      const json = await proxyResp.json();
+      const data = json.data || {};
+      return {
+        reports: cleanAndFilterReports(data.reports || []),
+        postOffices: cleanAndFilterPostOffices(data.postOffices || []),
+        users: data.users || [],
+      };
+    }
+  } catch (e) {
+    console.warn('Proxy fetch failed, falling back to direct fetch', e);
+  }
+
+  // 2. Direct fetch fallback
   const resp = await fetch(url, { method: 'GET', mode: 'cors' });
   if (!resp.ok) {
     throw new Error(`Failed to fetch database via Webhook (${resp.status})`);
@@ -2112,27 +2146,44 @@ export const saveDatabaseViaWebhook = async (
   const cleanUrl = webhookUrl.trim();
   if (!cleanUrl) return false;
 
+  const payload = {
+    action: 'save_all_database',
+    reports: data.reports,
+    postOffices: data.postOffices,
+    users: data.users,
+    config: {
+      whatsapp_phone_number_id: data.whatsAppConfig.phoneNumberId,
+      whatsapp_access_token: data.whatsAppConfig.accessToken,
+      whatsapp_webapp_url: data.whatsAppConfig.webAppUrl,
+      whatsapp_auto_reminders: data.whatsAppConfig.autoRemindersEnabled ? 'true' : 'false',
+      whatsapp_reminder_time: data.whatsAppConfig.reminderTime,
+      trigger_reminder_time: data.triggerConfig.reminderTriggerTime,
+      trigger_backup_time: data.triggerConfig.backupTriggerTime,
+      trigger_rollover_time: data.triggerConfig.rolloverTriggerTime,
+    },
+    logs: data.logs,
+  };
+
+  // 1. Try server-side proxy
+  try {
+    const proxyResp = await fetch('/api/proxy-sheets-webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUrl: cleanUrl, payload }),
+    });
+    if (proxyResp.ok) {
+      return true;
+    }
+  } catch (e) {
+    console.warn('Proxy save failed, falling back to direct no-cors:', e);
+  }
+
+  // 2. Fallback direct no-cors
   await fetch(cleanUrl, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({
-      action: 'save_all_database',
-      reports: data.reports,
-      postOffices: data.postOffices,
-      users: data.users,
-      config: {
-        whatsapp_phone_number_id: data.whatsAppConfig.phoneNumberId,
-        whatsapp_access_token: data.whatsAppConfig.accessToken,
-        whatsapp_webapp_url: data.whatsAppConfig.webAppUrl,
-        whatsapp_auto_reminders: data.whatsAppConfig.autoRemindersEnabled ? 'true' : 'false',
-        whatsapp_reminder_time: data.whatsAppConfig.reminderTime,
-        trigger_reminder_time: data.triggerConfig.reminderTriggerTime,
-        trigger_backup_time: data.triggerConfig.backupTriggerTime,
-        trigger_rollover_time: data.triggerConfig.rolloverTriggerTime,
-      },
-      logs: data.logs,
-    }),
+    body: JSON.stringify(payload),
   });
 
   return true;
