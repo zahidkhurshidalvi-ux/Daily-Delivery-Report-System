@@ -47,6 +47,7 @@ export function subscribeToPostOffices(
             mobileNumber: data.mobileNumber || '',
             status: data.status || 'ACTIVE',
             initialBalance: typeof data.initialBalance === 'number' ? data.initialBalance : 0,
+            createdDate: data.createdDate || undefined,
           });
         }
       });
@@ -165,6 +166,7 @@ export async function savePostOfficeToCloud(office: PostOffice): Promise<void> {
         mobileNumber: office.mobileNumber || '',
         status: office.status || 'ACTIVE',
         initialBalance: Number(office.initialBalance) || 0,
+        createdDate: office.createdDate || null,
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
@@ -206,6 +208,7 @@ export async function syncAllOfficesToCloud(offices: PostOffice[]): Promise<void
           mobileNumber: po.mobileNumber || '',
           status: po.status || 'ACTIVE',
           initialBalance: Number(po.initialBalance) || 0,
+          createdDate: po.createdDate || null,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }

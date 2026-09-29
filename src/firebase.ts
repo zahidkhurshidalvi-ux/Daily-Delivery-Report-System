@@ -1,11 +1,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
-  initializeFirestore,
   getFirestore,
   doc,
   getDocFromServer,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -13,21 +10,8 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore with configured Database ID and multi-tab local persistence
-let firestoreInstance: Firestore;
-try {
-  if (typeof window !== 'undefined') {
-    firestoreInstance = initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    }, firebaseConfig.firestoreDatabaseId);
-  } else {
-    firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-  }
-} catch (e) {
-  firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-}
-
-export const db = firestoreInstance;
+// Initialize Firestore with configured Database ID (skill-compliant)
+export const db: Firestore = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export enum OperationType {
   CREATE = 'create',

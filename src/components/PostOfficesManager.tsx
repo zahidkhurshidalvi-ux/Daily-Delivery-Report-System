@@ -1,6 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { PostOffice } from '../types';
-import { cleanAndFilterPostOffices, isInvalidPostOfficeName } from '../utils/calculations';
+import { PostOffice, DailyReport } from '../types';
+import {
+  cleanAndFilterPostOffices,
+  isInvalidPostOfficeName,
+  formatDatePK,
+  getTodayDateString,
+  getOfficeEffectiveStartDate,
+} from '../utils/calculations';
 import {
   Building,
   Plus,
@@ -15,27 +21,39 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Check,
+  Calendar,
 } from 'lucide-react';
 
 interface PostOfficesManagerProps {
   postOffices: PostOffice[];
+  reports?: DailyReport[];
   onSaveOffice: (office: PostOffice) => void;
   onToggleStatus: (officeId: string) => void;
   onDeleteOffice: (officeId: string) => void;
+  onBulkImport?: (offices: PostOffice[], replaceExisting: boolean) => void;
   onBulkImportOffices?: (offices: PostOffice[], replaceExisting: boolean) => void;
+  onClearAll?: () => void;
   onClearAllOffices?: () => void;
+  onResetDefault?: () => void;
   onResetDefaultOffices?: () => void;
 }
 
 export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
   postOffices,
+  reports = [],
   onSaveOffice,
   onToggleStatus,
   onDeleteOffice,
+  onBulkImport,
   onBulkImportOffices,
+  onClearAll,
   onClearAllOffices,
+  onResetDefault,
   onResetDefaultOffices,
 }) => {
+  const triggerBulkImport = onBulkImport || onBulkImportOffices;
+  const triggerClearAll = onClearAll || onClearAllOffices;
+  const triggerResetDefault = onResetDefault || onResetDefaultOffices;
   const [searchTerm, setSearchTerm] = useState('');
   const [editingOffice, setEditingOffice] = useState<PostOffice | null>(null);
   const [deletingOffice, setDeletingOffice] = useState<PostOffice | null>(null);
@@ -56,6 +74,7 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
   const [postmasterName, setPostmasterName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [initialBalance, setInitialBalance] = useState(0);
+  const [createdDate, setCreatedDate] = useState(getTodayDateString());
 
   const cleanOfficesList = cleanAndFilterPostOffices(postOffices);
   const searchLower = (searchTerm || '').toLowerCase();
@@ -74,6 +93,7 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
     setPostmasterName('');
     setMobileNumber('03001234567');
     setInitialBalance(0);
+    setCreatedDate(getTodayDateString());
     setIsModalOpen(true);
   };
 
@@ -83,6 +103,7 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
     setPostmasterName(po.postmasterName);
     setMobileNumber(po.mobileNumber);
     setInitialBalance(po.initialBalance || 0);
+    setCreatedDate(po.createdDate || getOfficeEffectiveStartDate(po, reports));
     setIsModalOpen(true);
   };
 
@@ -98,6 +119,7 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
       mobileNumber: mobileNumber.trim() || '03000000000',
       status: editingOffice ? editingOffice.status : 'ACTIVE',
       initialBalance: Number(initialBalance) || 0,
+      createdDate: createdDate || getTodayDateString(),
     };
 
     onSaveOffice(officeToSave);
@@ -143,13 +165,14 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
           mobileNumber: poMobile.toLowerCase().includes('mobile') || !poMobile ? `030012345${String(idx + 1).padStart(2, '0')}` : poMobile,
           status: 'ACTIVE',
           initialBalance: 0,
+          createdDate: getTodayDateString(),
         });
       }
     });
 
     const validBatch = cleanAndFilterPostOffices(parsedOffices);
-    if (validBatch.length > 0 && onBulkImportOffices) {
-      onBulkImportOffices(validBatch, bulkMode === 'replace');
+    if (validBatch.length > 0 && triggerBulkImport) {
+      triggerBulkImport(validBatch, bulkMode === 'replace');
       setImportSuccessMsg(`Successfully imported ${validBatch.length} post offices!`);
       setTimeout(() => {
         setIsBulkModalOpen(false);
@@ -265,7 +288,7 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
           <span>Alphabetical A-Z Ordering is automatically applied to all portals & dropdowns.</span>
         </div>
         <div className="flex items-center space-x-2">
-          {onResetDefaultOffices && (
+          {triggerResetDefault && (
             <button
               onClick={() => setIsResetModalOpen(true)}
               className="text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-100 border border-gray-300 px-2.5 py-1 rounded text-[11px] font-semibold flex items-center space-x-1"
@@ -274,7 +297,7 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
               <span>Reset Standard 30 Offices</span>
             </button>
           )}
-          {onClearAllOffices && postOffices.length > 0 && (
+          {triggerClearAll && postOffices.length > 0 && (
             <button
               onClick={() => setIsClearAllModalOpen(true)}
               className="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded text-[11px] font-semibold flex items-center space-x-1"
@@ -321,6 +344,7 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
                 <tr>
                   <th className="p-2.5">#</th>
                   <th className="p-2.5">Post Office Name</th>
+                  <th className="p-2.5">Active From (تاریخ شمولیت)</th>
                   <th className="p-2.5">Postmaster / Incharge</th>
                   <th className="p-2.5">Mobile Number (WhatsApp)</th>
                   <th className="p-2.5 text-center">Status</th>
@@ -332,6 +356,9 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
                   <tr key={po.id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="p-2.5 text-gray-400 font-mono text-[11px]">{index + 1}</td>
                     <td className="p-2.5 font-bold text-gray-900">{po.name}</td>
+                    <td className="p-2.5 text-emerald-800 font-mono text-[11px] font-semibold">
+                      {formatDatePK(po.createdDate || getOfficeEffectiveStartDate(po, reports))}
+                    </td>
                     <td className="p-2.5 text-gray-700">{po.postmasterName}</td>
                     <td className="p-2.5 text-[#006633] font-mono font-bold">{po.mobileNumber}</td>
                     <td className="p-2.5 text-center">
@@ -647,6 +674,22 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
                   placeholder="e.g. 03001234567"
                   className="w-full bg-white border border-gray-300 text-[#006633] font-mono rounded-md p-2 focus:ring-1 focus:ring-[#006633] focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-gray-700 font-bold mb-1">
+                  Active From / Added Date (شمولیت کی تاریخ) *
+                </label>
+                <input
+                  type="date"
+                  value={createdDate}
+                  onChange={(e) => setCreatedDate(e.target.value)}
+                  required
+                  className="w-full bg-white border border-gray-300 text-gray-900 rounded-md p-2 focus:ring-1 focus:ring-[#006633] focus:outline-none font-medium"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  دفتر صرف اس تاریخ اور اس کے بعد کی تاریخوں میں شمار ہوگا (اس تاریخ سے پچھلی تاریخوں کی مسنگ رپورٹ میں نہیں آئے گا)۔
+                </p>
               </div>
 
               <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-200">

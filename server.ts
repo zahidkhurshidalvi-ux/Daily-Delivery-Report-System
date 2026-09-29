@@ -1,10 +1,18 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Allow iframe embedding within AI Studio
+  app.use((req, res, next) => {
+    res.removeHeader("X-Frame-Options");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    next();
+  });
 
   app.use(express.json());
 
@@ -38,6 +46,22 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+
+    // Fallback handler to guarantee transformed index.html is served in development
+    app.use("*", async (req, res, next) => {
+      const url = req.originalUrl;
+      if (url.startsWith("/api") || (url.includes(".") && !url.endsWith(".html"))) {
+        return next();
+      }
+      try {
+        const indexPath = path.join(process.cwd(), "index.html");
+        let html = fs.readFileSync(indexPath, "utf-8");
+        html = await vite.transformIndexHtml(url, html);
+        res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(html);
+      } catch (e) {
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
@@ -52,3 +76,4 @@ async function startServer() {
 }
 
 startServer();
+

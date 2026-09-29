@@ -359,6 +359,9 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
         if (existing.initialBalance === 0 && initBal > 0) {
           existing.initialBalance = initBal;
         }
+        if (!existing.createdDate && po.createdDate) {
+          existing.createdDate = po.createdDate;
+        }
       }
       continue;
     }
@@ -385,6 +388,7 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
       mobileNumber: mob,
       status: po.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
       initialBalance: initBal >= 0 && initBal < 10000 ? initBal : 0,
+      createdDate: po.createdDate ? normalizeDateToIso(po.createdDate) || po.createdDate : undefined,
     });
   }
 
@@ -734,6 +738,53 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
 }
 
 /**
+ * Determines the effective start/joining date for a Post Office.
+ * Missing reports, pendency, and reminders are strictly calculated starting from this date onwards.
+ * If office has an explicit createdDate (>= SYSTEM_LAUNCH_DATE), uses it.
+ * If createdDate is not present:
+ *   - If office already has submitted reports in `reports`, the earliest submitted report date (or SYSTEM_LAUNCH_DATE) is used.
+ *   - If office has NO submitted reports at all, it is considered newly added! Defaults to today's date so past backlog is never shown.
+ */
+export function getOfficeEffectiveStartDate(
+  office: PostOffice | { name: string; createdDate?: string },
+  reports: DailyReport[] = []
+): string {
+  if (office.createdDate) {
+    const isoCreated = normalizeDateToIso(office.createdDate) || office.createdDate;
+    if (isoCreated >= SYSTEM_LAUNCH_DATE) {
+      return isoCreated;
+    }
+  }
+
+  const officeNorm = (office.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  if (!officeNorm) return SYSTEM_LAUNCH_DATE;
+
+  const validReports = cleanAndFilterReports(reports);
+  const officeReports = validReports.filter((r) => {
+    if (!r || !r.officeName || !r.date) return false;
+    const rNorm = r.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    if (rNorm !== officeNorm) return false;
+    if (r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted')) {
+      return false;
+    }
+    return true;
+  });
+
+  if (officeReports.length > 0) {
+    const sortedDates = officeReports
+      .map((r) => normalizeDateToIso(r.date) || r.date)
+      .filter((d) => Boolean(d) && d >= SYSTEM_LAUNCH_DATE && d !== '2026-07-29')
+      .sort();
+    if (sortedDates.length > 0) {
+      return sortedDates[0];
+    }
+  }
+
+  // Newly added office without past reports -> Start from today!
+  return getTodayDateString();
+}
+
+/**
  * Returns a list of daily reports for a target date, automatically including
  * entries for active post offices that have not submitted a report till 5 PM
  * with remarks 'Report not submitted till 5 PM' (or 'Sunday Holiday' on Sundays).
@@ -774,7 +825,14 @@ export function getCompleteDateReports(
   });
 
   const missingReports: DailyReport[] = uniqueActiveOffices
-    .filter((po) => !submittedOfficeKeys.has(po.name.toLowerCase().trim().replace(/[^a-z0-9]/g, '')))
+    .filter((po) => {
+      // Office must only be considered from its effective start/added date onwards!
+      const officeStartDate = getOfficeEffectiveStartDate(po, validReports);
+      if (targetDate < officeStartDate) {
+        return false;
+      }
+      return !submittedOfficeKeys.has(po.name.toLowerCase().trim().replace(/[^a-z0-9]/g, ''));
+    })
     .map((office) => {
       // Find previous submitted report for this office to carry forward last balance if available
       const pastReports = validReports
@@ -941,36 +999,51 @@ export function getDayOfWeek(dateStr: string): string {
 
 /**
  * Returns all missing report dates for a specific office up to targetDate,
- * strictly starting from official system launch date (17-08-2026),
- * strictly EXCLUDING dates prior to launch (such as 29/07/2026) and Sundays.
+ * strictly starting from the office's effective addition/creation date (or SYSTEM_LAUNCH_DATE),
+ * strictly EXCLUDING dates prior to addition, dates prior to launch (such as 29/07/2026),
+ * Sundays, and declared public holidays.
  */
 export function getMissingDatesForOffice(
   officeName: string,
   targetDate: string,
-  reports: DailyReport[]
+  reports: DailyReport[],
+  createdDateOrOffice?: string | PostOffice
 ): string[] {
   if (!targetDate || !officeName) return [];
 
   const isoTarget = normalizeDateToIso(targetDate);
   const todayIso = getTodayDateString();
 
-  // If targetDate is before system launch date (17-08-2026) or is 29/07/2026, no pendency applies
-  if (!isoTarget || isoTarget < SYSTEM_LAUNCH_DATE || isoTarget === '2026-07-29') {
+  let effectiveStartDate = SYSTEM_LAUNCH_DATE;
+  if (typeof createdDateOrOffice === 'string' && createdDateOrOffice) {
+    const norm = normalizeDateToIso(createdDateOrOffice) || createdDateOrOffice;
+    if (norm >= SYSTEM_LAUNCH_DATE) {
+      effectiveStartDate = norm;
+    }
+  } else if (createdDateOrOffice && typeof createdDateOrOffice === 'object') {
+    effectiveStartDate = getOfficeEffectiveStartDate(createdDateOrOffice, reports);
+  } else {
+    effectiveStartDate = getOfficeEffectiveStartDate({ name: officeName } as PostOffice, reports);
+  }
+
+  // If targetDate is before system launch date (17-08-2026), is 29/07/2026, or before office effective start date,
+  // no pendency applies
+  if (!isoTarget || isoTarget < SYSTEM_LAUNCH_DATE || isoTarget === '2026-07-29' || isoTarget < effectiveStartDate) {
     return [];
   }
 
   // Strict upper bound: cannot be in the future beyond today
   const effectiveTarget = isoTarget > todayIso ? todayIso : isoTarget;
 
-  // Get all unique dates present in reports up to effectiveTarget, strictly bounded by SYSTEM_LAUNCH_DATE
-  // Excludes 2026-07-29, any dates < SYSTEM_LAUNCH_DATE, Sundays, and declared public holidays (e.g. 26/08/2026)
+  // Get all unique dates present in reports up to effectiveTarget, strictly bounded by effectiveStartDate
+  // Excludes 2026-07-29, any dates < effectiveStartDate, Sundays, and declared public holidays (e.g. 26/08/2026)
   const allDates = Array.from(
     new Set([...reports.map((r) => normalizeDateToIso(r.date)), effectiveTarget])
   )
     .filter(
       (d) =>
         Boolean(d) &&
-        d >= SYSTEM_LAUNCH_DATE &&
+        d >= effectiveStartDate &&
         d !== '2026-07-29' &&
         d <= effectiveTarget &&
         !isSunday(d) &&

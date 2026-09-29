@@ -11,6 +11,7 @@ import {
   cleanAndFilterPostOffices,
   cleanAndFilterReports,
   getTodayDateString,
+  getOfficeEffectiveStartDate,
   isInvalidPostOfficeName,
   isSunday,
   isHoliday,
@@ -74,6 +75,7 @@ function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[
         postmasterName: (inc.postmasterName && inc.postmasterName.trim()) || existing.postmasterName || 'Postmaster',
         status: inc.status || existing.status || 'ACTIVE',
         initialBalance: typeof inc.initialBalance === 'number' ? inc.initialBalance : existing.initialBalance,
+        createdDate: inc.createdDate || existing.createdDate || undefined,
       });
     } else {
       officeMap.set(key, { ...inc });
@@ -88,16 +90,24 @@ export default function App() {
 
   // Primary State Persistence
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('pakpost_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('pakpost_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
 
   const [postOffices, setPostOffices] = useState<PostOffice[]>(() => {
-    const saved = localStorage.getItem('pakpost_offices');
-    const rawList: PostOffice[] = saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
-    return cleanAndFilterPostOffices(rawList);
+    try {
+      const saved = localStorage.getItem('pakpost_offices');
+      const rawList: PostOffice[] = saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
+      return cleanAndFilterPostOffices(rawList);
+    } catch {
+      return cleanAndFilterPostOffices(INITIAL_POST_OFFICES);
+    }
   });
 
   const postOfficesRef = useRef<PostOffice[]>(postOffices);
@@ -106,24 +116,40 @@ export default function App() {
   }, [postOffices]);
 
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('pakpost_users');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
+    try {
+      const saved = localStorage.getItem('pakpost_users');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
+    } catch {
+      return INITIAL_USERS;
+    }
   });
 
   const [reports, setReports] = useState<DailyReport[]>(() => {
-    const saved = localStorage.getItem('pakpost_reports');
-    const rawList: DailyReport[] = saved ? JSON.parse(saved) : INITIAL_REPORTS;
-    return cleanAndFilterReports(rawList);
+    try {
+      const saved = localStorage.getItem('pakpost_reports');
+      const rawList: DailyReport[] = saved ? JSON.parse(saved) : INITIAL_REPORTS;
+      return cleanAndFilterReports(rawList);
+    } catch {
+      return cleanAndFilterReports(INITIAL_REPORTS);
+    }
   });
 
   const [whatsAppConfig, setWhatsAppConfig] = useState<WhatsAppConfig>(() => {
-    const saved = localStorage.getItem('pakpost_whatsapp');
-    return saved ? JSON.parse(saved) : INITIAL_WHATSAPP_CONFIG;
+    try {
+      const saved = localStorage.getItem('pakpost_whatsapp');
+      return saved ? JSON.parse(saved) : INITIAL_WHATSAPP_CONFIG;
+    } catch {
+      return INITIAL_WHATSAPP_CONFIG;
+    }
   });
 
   const [triggerConfig, setTriggerConfig] = useState<TriggerConfig>(() => {
-    const saved = localStorage.getItem('pakpost_triggers');
-    return saved ? JSON.parse(saved) : INITIAL_TRIGGER_CONFIG;
+    try {
+      const saved = localStorage.getItem('pakpost_triggers');
+      return saved ? JSON.parse(saved) : INITIAL_TRIGGER_CONFIG;
+    } catch {
+      return INITIAL_TRIGGER_CONFIG;
+    }
   });
 
   const [logs, setLogs] = useState<SystemLog[]>([
@@ -148,8 +174,12 @@ export default function App() {
 
   // Auto-Refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem('pakpost_auto_refresh');
-    return saved ? JSON.parse(saved) : true;
+    try {
+      const saved = localStorage.getItem('pakpost_auto_refresh');
+      return saved ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
   });
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(new Date());
 
@@ -250,6 +280,28 @@ export default function App() {
     localStorage.setItem('pakpost_offices', JSON.stringify(postOffices));
   }, [postOffices]);
 
+  // Guarantee every office has a valid createdDate, ensuring newly added offices only count from their addition date
+  useEffect(() => {
+    if (postOffices.length === 0) return;
+    let hasMissing = false;
+    const filled = postOffices.map((po) => {
+      if (!po.createdDate) {
+        hasMissing = true;
+        return {
+          ...po,
+          createdDate: getOfficeEffectiveStartDate(po, reports),
+        };
+      }
+      return po;
+    });
+
+    if (hasMissing) {
+      const cleaned = cleanAndFilterPostOffices(filled);
+      setPostOffices(cleaned);
+      syncAllOfficesToCloud(cleaned);
+    }
+  }, [postOffices.length, reports.length]);
+
   useEffect(() => {
     localStorage.setItem('pakpost_reports', JSON.stringify(reports));
   }, [reports]);
@@ -311,8 +363,10 @@ export default function App() {
 
     if (existingRep || (isEdit && editingReport)) {
       const targetId = existingRep?.id || editingReport?.id || `rep-${reportDateIso}-${officeNameSafe}`;
+      const baseRecord = existingRep || editingReport;
       const updatedReportRecord: DailyReport = {
-        ...(existingRep || editingReport || {}),
+        submittedAt: baseRecord?.submittedAt || new Date().toISOString(),
+        ...(baseRecord || {}),
         ...reportData,
         date: reportDateIso,
         id: targetId,
@@ -374,30 +428,35 @@ export default function App() {
   // Master Data Office CRUD
   const handleSaveOffice = (office: PostOffice) => {
     if (!office.name || isInvalidPostOfficeName(office.name)) return;
+    const officeToSave: PostOffice = {
+      ...office,
+      createdDate: office.createdDate || getTodayDateString(),
+    };
     let updated: PostOffice[];
-    const targetNameLower = (office.name || '').toLowerCase().trim();
+    const targetNameLower = (officeToSave.name || '').toLowerCase().trim();
     const exists = postOffices.some(
-      (p) => p.id === office.id || (p.name || '').toLowerCase().trim() === targetNameLower
+      (p) => p.id === officeToSave.id || (p.name || '').toLowerCase().trim() === targetNameLower
     );
     if (exists) {
       updated = postOffices.map((p) => {
-        if (p.id === office.id || (p.name || '').toLowerCase().trim() === targetNameLower) {
+        if (p.id === officeToSave.id || (p.name || '').toLowerCase().trim() === targetNameLower) {
           return {
             ...p,
-            ...office,
-            mobileNumber: office.mobileNumber !== undefined ? office.mobileNumber : p.mobileNumber,
+            ...officeToSave,
+            createdDate: officeToSave.createdDate || p.createdDate || getOfficeEffectiveStartDate(p, reports),
+            mobileNumber: officeToSave.mobileNumber !== undefined ? officeToSave.mobileNumber : p.mobileNumber,
           };
         }
         return p;
       });
-      logAction('MASTER_OFFICE_UPDATE', `Updated office master record for ${office.name} with contact ${office.mobileNumber || 'N/A'}`);
+      logAction('MASTER_OFFICE_UPDATE', `Updated office master record for ${officeToSave.name} with contact ${officeToSave.mobileNumber || 'N/A'}`);
     } else {
-      updated = [...postOffices, office];
-      logAction('MASTER_OFFICE_ADD', `Added new post office: ${office.name} with contact ${office.mobileNumber || 'N/A'}`);
+      updated = [...postOffices, officeToSave];
+      logAction('MASTER_OFFICE_ADD', `Added new post office: ${officeToSave.name} (Effective Date: ${officeToSave.createdDate}) with contact ${officeToSave.mobileNumber || 'N/A'}`);
     }
     const cleaned = cleanAndFilterPostOffices(updated);
     setPostOffices(cleaned);
-    savePostOfficeToCloud(office);
+    savePostOfficeToCloud(officeToSave);
   };
 
   const handleToggleOfficeStatus = (officeId: string) => {
@@ -631,6 +690,7 @@ export default function App() {
           {activeTab === 'post-offices' && (
             <PostOfficesManager
               postOffices={postOffices}
+              reports={reports}
               onSaveOffice={handleSaveOffice}
               onDeleteOffice={handleDeleteOffice}
               onToggleStatus={handleToggleOfficeStatus}

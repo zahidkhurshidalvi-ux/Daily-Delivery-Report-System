@@ -4,6 +4,7 @@ import {
   formatDatePK,
   getTodayDateString,
   getMissingDatesForOffice,
+  getOfficeEffectiveStartDate,
   cleanAndFilterPostOffices,
   cleanAndFilterReports,
   isSunday,
@@ -98,6 +99,12 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   const isPreLaunchDate = isoSelected < SYSTEM_LAUNCH_DATE || isoSelected === '2026-07-29';
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
 
+  // Active offices for the selectedDate are offices that were added on or before selectedDate
+  const activeOfficesForSelectedDate = activeOffices.filter((po) => {
+    const start = getOfficeEffectiveStartDate(po, validReports);
+    return isoSelected >= start;
+  });
+
   // Filter reports submitted specifically for selectedDate (excluding placeholder or unsubmitted entries)
   const dateReports = validReports.filter(
     (r) =>
@@ -116,14 +123,18 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
             .filter((r) => normOffice(r.officeName) === officeKey)
             .sort((a, b) => (a.date > b.date ? -1 : 1));
 
-          const allMissingDates = getMissingDatesForOffice(office.name, isoSelected, validReports);
+          const officeStartDate = getOfficeEffectiveStartDate(office, validReports);
+          const allMissingDates = getMissingDatesForOffice(office.name, isoSelected, validReports, officeStartDate);
           const isSubmittedSelectedDate = submittedOfficeKeys.has(officeKey);
-          const isMissingSelectedDate = !isClosedDay && !isSubmittedSelectedDate;
+          
+          // An office can ONLY be missing for selectedDate if selectedDate is on or after the office was added!
+          const isOfficeActiveOnSelectedDate = isoSelected >= officeStartDate;
+          const isMissingSelectedDate = !isClosedDay && !isSubmittedSelectedDate && isOfficeActiveOnSelectedDate;
 
-          // Missing dates strictly prior to selectedDate
+          // Missing dates strictly prior to selectedDate (strictly bounded by officeStartDate)
           const priorMissingDates = allMissingDates.filter((d) => d !== isoSelected);
 
-          // Full effective missing dates: if submitted on selectedDate, selectedDate is NEVER included
+          // Full effective missing dates: if submitted on selectedDate or not active on selectedDate, selectedDate is NEVER included
           const effectiveMissingDates = isMissingSelectedDate
             ? Array.from(new Set([...priorMissingDates, isoSelected])).sort()
             : priorMissingDates;
@@ -135,6 +146,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
             isSubmittedSelectedDate,
             isMissingSelectedDate,
             priorMissingDates,
+            officeStartDate,
           };
         })
         .filter((item) => item.missingDates.length > 0)
@@ -354,7 +366,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
             Offices Pending Daily Delivery Report ({pendingList.length})
           </h2>
           <p className="text-xs text-gray-600 mt-0.5 font-medium">
-            <strong className="text-emerald-700">{activeOffices.length - pendingList.length}</strong> of {activeOffices.length} offices submitted today. Total missing submissions: <strong className="text-red-600">{totalPendingReportsCount}</strong>.
+            <strong className="text-emerald-700">{Math.max(0, activeOfficesForSelectedDate.length - pendingList.length)}</strong> of {activeOfficesForSelectedDate.length} active offices on this date. Total missing submissions: <strong className="text-red-600">{totalPendingReportsCount}</strong>.
           </p>
         </div>
 

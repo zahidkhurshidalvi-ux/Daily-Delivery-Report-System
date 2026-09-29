@@ -22,6 +22,7 @@ import {
   isInvalidPostOfficeName,
   cleanAndFilterPostOffices,
   cleanAndFilterReports,
+  normalizeDateToIso,
 } from './calculations';
 
 // Initialize Firebase App & Auth
@@ -380,10 +381,12 @@ export const smartParseOfficeRow = (
     const statusCol = colMap.status ?? colMap.state;
     const balCol = colMap.initialbalance ?? colMap.balance ?? colMap.openingbalance ?? colMap.bal;
     const idCol = colMap.id ?? colMap.officeid ?? colMap.sno ?? colMap.sr;
+    const createdCol = colMap.createddate ?? colMap.created ?? colMap.addeddate ?? colMap.startdate ?? colMap.activefrom;
 
     let rawPm = pmCol !== undefined && row[pmCol] ? String(row[pmCol]).trim() : 'Postmaster';
     let rawMob = mobCol !== undefined && row[mobCol] ? String(row[mobCol]).trim() : '03001234567';
     let rawBal = balCol !== undefined ? Number(row[balCol]) || 0 : 0;
+    let rawCreated = createdCol !== undefined && row[createdCol] ? normalizeDateToIso(String(row[createdCol])) || undefined : undefined;
 
     // If balance was mistakenly mapped to a phone number
     if (rawBal >= 10000) {
@@ -405,6 +408,7 @@ export const smartParseOfficeRow = (
       mobileNumber: String(rawMob || '').toLowerCase().includes('mobile') || String(rawMob || '').toLowerCase().includes('phone') ? '03001234567' : rawMob,
       status: statusCol !== undefined && String(row[statusCol]).toUpperCase().includes('INACTIVE') ? 'INACTIVE' : 'ACTIVE',
       initialBalance: rawBal >= 0 && rawBal < 10000 ? rawBal : 0,
+      createdDate: rawCreated,
     };
   }
 
@@ -810,6 +814,11 @@ export const rowToOffice = (row: any[]): PostOffice | null => {
     bal = 0;
   }
 
+  let createdDate: string | undefined = undefined;
+  if (row[7] && typeof row[7] === 'string' && (row[7].includes('-') || row[7].includes('/'))) {
+    createdDate = normalizeDateToIso(row[7]) || undefined;
+  }
+
   return {
     id: row[1] ? String(row[1]) : `po-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     name,
@@ -817,6 +826,7 @@ export const rowToOffice = (row: any[]): PostOffice | null => {
     mobileNumber: String(mob || '').toLowerCase().includes('mobile') ? '03001234567' : mob,
     status: String(row[5]).toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
     initialBalance: bal >= 0 && bal < 10000 ? bal : 0,
+    createdDate,
   };
 };
 
