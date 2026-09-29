@@ -16,10 +16,7 @@ export const INITIAL_REPORTS: DailyReport[] = [];
 export const INITIAL_WHATSAPP_CONFIG: WhatsAppConfig = {
   phoneNumberId: '109823748912734',
   accessToken: 'YOUR_WHATSAPP_TOKEN',
-  webAppUrl:
-    typeof window !== 'undefined'
-      ? window.location.origin.replace('ais-dev-', 'ais-pre-')
-      : 'https://ais-pre-rwwvjvrm3z6vgnrmkpzbfq-653201276103.asia-southeast1.run.app',
+  webAppUrl: typeof window !== 'undefined' ? window.location.origin : 'https://script.google.com/macros/s/AKfycbx_YOUR_APP_ID/exec',
   autoRemindersEnabled: true,
   reminderTime: '17:00',
 };

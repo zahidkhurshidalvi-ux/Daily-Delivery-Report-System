@@ -6,7 +6,6 @@ import {
   getTodayDateString,
   summarizeReports,
   getCompleteDateReports,
-  getOfficeEffectiveStartDate,
   isSunday,
   isHoliday,
   getHolidayReason,
@@ -56,11 +55,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateNewReport,
   onNavigatePending,
 }) => {
-  const activeOffices = postOffices.filter((po) => {
-    if (po.status !== 'ACTIVE') return false;
-    const start = getOfficeEffectiveStartDate(po, reports);
-    return selectedDate >= start;
-  });
+  const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
   const dateReports = reports.filter((r) => r.date === selectedDate);
   const allDateReports = getCompleteDateReports(reports, postOffices, selectedDate);
   const receivedCount = dateReports.length;

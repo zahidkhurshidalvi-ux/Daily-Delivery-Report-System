@@ -16,7 +16,6 @@ export interface PostOffice {
   mobileNumber: string;
   status: 'ACTIVE' | 'INACTIVE';
   initialBalance: number;
-  createdDate?: string; // YYYY-MM-DD - Date office joined/added (pendency and missing reports only count on or after this date)
 }
 
 export interface DailyReport {

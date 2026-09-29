@@ -4,7 +4,6 @@ import {
   formatDatePK,
   getTodayDateString,
   getMissingDatesForOffice,
-  getOfficeEffectiveStartDate,
   cleanAndFilterPostOffices,
   cleanAndFilterReports,
   isSunday,
@@ -99,12 +98,6 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   const isPreLaunchDate = isoSelected < SYSTEM_LAUNCH_DATE || isoSelected === '2026-07-29';
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
 
-  // Active offices for the selectedDate are offices that were added on or before selectedDate
-  const activeOfficesForSelectedDate = activeOffices.filter((po) => {
-    const start = getOfficeEffectiveStartDate(po, validReports);
-    return isoSelected >= start;
-  });
-
   // Filter reports submitted specifically for selectedDate (excluding placeholder or unsubmitted entries)
   const dateReports = validReports.filter(
     (r) =>
@@ -123,18 +116,14 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
             .filter((r) => normOffice(r.officeName) === officeKey)
             .sort((a, b) => (a.date > b.date ? -1 : 1));
 
-          const officeStartDate = getOfficeEffectiveStartDate(office, validReports);
-          const allMissingDates = getMissingDatesForOffice(office.name, isoSelected, validReports, officeStartDate);
+          const allMissingDates = getMissingDatesForOffice(office.name, isoSelected, validReports);
           const isSubmittedSelectedDate = submittedOfficeKeys.has(officeKey);
-          
-          // An office can ONLY be missing for selectedDate if selectedDate is on or after the office was added!
-          const isOfficeActiveOnSelectedDate = isoSelected >= officeStartDate;
-          const isMissingSelectedDate = !isClosedDay && !isSubmittedSelectedDate && isOfficeActiveOnSelectedDate;
+          const isMissingSelectedDate = !isClosedDay && !isSubmittedSelectedDate;
 
-          // Missing dates strictly prior to selectedDate (strictly bounded by officeStartDate)
+          // Missing dates strictly prior to selectedDate
           const priorMissingDates = allMissingDates.filter((d) => d !== isoSelected);
 
-          // Full effective missing dates: if submitted on selectedDate or not active on selectedDate, selectedDate is NEVER included
+          // Full effective missing dates: if submitted on selectedDate, selectedDate is NEVER included
           const effectiveMissingDates = isMissingSelectedDate
             ? Array.from(new Set([...priorMissingDates, isoSelected])).sort()
             : priorMissingDates;
@@ -146,7 +135,6 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
             isSubmittedSelectedDate,
             isMissingSelectedDate,
             priorMissingDates,
-            officeStartDate,
           };
         })
         .filter((item) => item.missingDates.length > 0)
@@ -366,7 +354,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
             Offices Pending Daily Delivery Report ({pendingList.length})
           </h2>
           <p className="text-xs text-gray-600 mt-0.5 font-medium">
-            <strong className="text-emerald-700">{Math.max(0, activeOfficesForSelectedDate.length - pendingList.length)}</strong> of {activeOfficesForSelectedDate.length} active offices on this date. Total missing submissions: <strong className="text-red-600">{totalPendingReportsCount}</strong>.
+            <strong className="text-emerald-700">{activeOffices.length - pendingList.length}</strong> of {activeOffices.length} offices submitted today. Total missing submissions: <strong className="text-red-600">{totalPendingReportsCount}</strong>.
           </p>
         </div>
 
@@ -683,8 +671,7 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                   const directLink = generateWhatsAppWebLink(
                     item.office.mobileNumber,
                     `محترم پوسٹ ماسٹر صاحب (${item.office.name})،\n\n` + reminderMsg,
-                    whatsAppConfig.webAppUrl,
-                    item.office.name
+                    whatsAppConfig.webAppUrl
                   );
 
                   return (
@@ -779,23 +766,20 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
                       </td>
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
-                          {/* Direct WhatsApp Web/App Link (Cannot be blocked by popup blocker) */}
-                          <a
-                            href={directLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => {
-                              onLogAction(
-                                'WHATSAPP_REMINDER_CLICKED',
-                                `Opened WhatsApp direct message link for ${item.office.name} (${item.office.mobileNumber})`
-                              );
-                            }}
-                            className="bg-[#25D366] hover:bg-emerald-600 text-white font-bold text-[10.5px] px-2.5 py-1.5 rounded-md transition-all flex items-center space-x-1 shadow-xs cursor-pointer inline-flex items-center"
-                            title={`Send WhatsApp Reminder to ${item.office.name} (${item.office.mobileNumber})`}
+                          {/* Send WhatsApp Cloud API / Direct */}
+                          <button
+                            onClick={() => handleSendSingleReminder(item.office, item.missingDates)}
+                            disabled={singleSendingId === item.office.id}
+                            className="bg-[#25D366] hover:bg-emerald-600 text-white font-bold text-[10.5px] px-2.5 py-1.5 rounded-md transition-all flex items-center space-x-1 shadow-xs cursor-pointer disabled:opacity-50"
+                            title="Send WhatsApp Reminder"
                           >
-                            <Send className="w-3 h-3" />
+                            {singleSendingId === item.office.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Send className="w-3 h-3" />
+                            )}
                             <span>WhatsApp</span>
-                          </a>
+                          </button>
 
                           {/* Issue Explanation Call Button */}
                           {onNavigateExplanation && (

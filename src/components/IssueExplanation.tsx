@@ -79,10 +79,9 @@ export const IssueExplanation: React.FC<IssueExplanationProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Calculate missing dates for an office up to targetDate (EXCLUDING SUNDAYS, HOLIDAYS, and PRE-ADDITION DATES)
+  // Calculate missing dates for an office up to targetDate (EXCLUDING SUNDAYS)
   const getOfficePendingDates = (officeName: string): string[] => {
-    const foundOffice = postOffices.find((p) => p.name === officeName);
-    return getMissingDatesForOffice(officeName, targetDate, cleanReports, foundOffice);
+    return getMissingDatesForOffice(officeName, targetDate, cleanReports);
   };
 
   // Missing dates for currently selected office

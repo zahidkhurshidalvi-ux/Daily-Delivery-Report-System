@@ -32,8 +32,6 @@ interface DailyReportFormProps {
   editingReport?: DailyReport | null;
   onCancelEdit?: () => void;
   onViewPending?: () => void;
-  selectedDate?: string;
-  setSelectedDate?: (date: string) => void;
 }
 
 export const DailyReportForm: React.FC<DailyReportFormProps> = ({
@@ -44,8 +42,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
   editingReport,
   onCancelEdit,
   onViewPending,
-  selectedDate,
-  setSelectedDate,
 }) => {
   const today = getTodayDateString();
 
@@ -74,7 +70,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
           ? currentUser.officeName
           : sortedPostOffices[0]?.name || '');
 
-  const [date, setDate] = useState<string>(editingReport ? editingReport.date : selectedDate || today);
+  const [date, setDate] = useState<string>(editingReport ? editingReport.date : today);
   const [selectedOfficeName, setSelectedOfficeName] = useState<string>(initialOfficeName);
   const [lastBalance, setLastBalance] = useState<string>(
     editingReport ? String(editingReport.lastBalance) : ''
@@ -160,9 +156,9 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       !r.remarks?.includes('Report not submitted')
   );
 
-  // Missing/Pending dates for the currently selected office up to today (excluding Sundays, public holidays, pre-launch, and dates prior to office addition)
+  // Missing/Pending dates for the currently selected office up to today (excluding Sundays, public holidays, pre-launch)
   const pendingDatesForOffice = selectedOfficeName
-    ? getMissingDatesForOffice(selectedOfficeName, today, reports, selectedOffice)
+    ? getMissingDatesForOffice(selectedOfficeName, today, reports)
     : [];
 
   // Parsed numeric values for calculation

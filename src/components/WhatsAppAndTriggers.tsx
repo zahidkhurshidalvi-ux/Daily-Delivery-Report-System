@@ -83,41 +83,15 @@ export const WhatsAppAndTriggers: React.FC<WhatsAppAndTriggersProps> = ({
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-gray-700 font-bold">
-                  System Web App Link (Appended in Messages) *
-                </label>
-                <div className="flex items-center space-x-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const publicUrl = typeof window !== 'undefined'
-                        ? window.location.origin.replace('ais-dev-', 'ais-pre-')
-                        : 'https://ais-pre-rwwvjvrm3z6vgnrmkpzbfq-653201276103.asia-southeast1.run.app';
-                      setWebAppUrl(publicUrl);
-                    }}
-                    className="text-[10px] text-[#006633] font-bold underline hover:text-[#00401A] cursor-pointer"
-                  >
-                    Use Live Portal Link
-                  </button>
-                  {webAppUrl && (
-                    <a
-                      href={webAppUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[10px] text-blue-600 font-bold underline hover:text-blue-800"
-                    >
-                      Test Link ↗
-                    </a>
-                  )}
-                </div>
-              </div>
+              <label className="block text-gray-700 font-bold mb-1">
+                System Web App Link (Appended in Messages) *
+              </label>
               <input
                 type="text"
                 value={webAppUrl}
                 onChange={(e) => setWebAppUrl(e.target.value)}
-                placeholder="https://..."
-                className="w-full bg-white border border-gray-300 text-[#006633] font-mono rounded-md p-2 focus:ring-1 focus:ring-[#006633] focus:outline-none text-xs"
+                placeholder="https://script.google.com/macros/s/.../exec"
+                className="w-full bg-white border border-gray-300 text-[#006633] font-mono rounded-md p-2 focus:ring-1 focus:ring-[#006633] focus:outline-none"
                 required
               />
             </div>

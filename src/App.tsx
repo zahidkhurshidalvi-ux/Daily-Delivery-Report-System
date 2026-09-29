@@ -11,7 +11,6 @@ import {
   cleanAndFilterPostOffices,
   cleanAndFilterReports,
   getTodayDateString,
-  getOfficeEffectiveStartDate,
   isInvalidPostOfficeName,
   isSunday,
   isHoliday,
@@ -75,7 +74,6 @@ function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[
         postmasterName: (inc.postmasterName && inc.postmasterName.trim()) || existing.postmasterName || 'Postmaster',
         status: inc.status || existing.status || 'ACTIVE',
         initialBalance: typeof inc.initialBalance === 'number' ? inc.initialBalance : existing.initialBalance,
-        createdDate: inc.createdDate || existing.createdDate || undefined,
       });
     } else {
       officeMap.set(key, { ...inc });
@@ -90,24 +88,16 @@ export default function App() {
 
   // Primary State Persistence
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem('pakpost_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
+    const saved = localStorage.getItem('pakpost_user');
+    return saved ? JSON.parse(saved) : null;
   });
 
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
 
   const [postOffices, setPostOffices] = useState<PostOffice[]>(() => {
-    try {
-      const saved = localStorage.getItem('pakpost_offices');
-      const rawList: PostOffice[] = saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
-      return cleanAndFilterPostOffices(rawList);
-    } catch {
-      return cleanAndFilterPostOffices(INITIAL_POST_OFFICES);
-    }
+    const saved = localStorage.getItem('pakpost_offices');
+    const rawList: PostOffice[] = saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
+    return cleanAndFilterPostOffices(rawList);
   });
 
   const postOfficesRef = useRef<PostOffice[]>(postOffices);
@@ -116,44 +106,24 @@ export default function App() {
   }, [postOffices]);
 
   const [users, setUsers] = useState<User[]>(() => {
-    try {
-      const saved = localStorage.getItem('pakpost_users');
-      return saved ? JSON.parse(saved) : INITIAL_USERS;
-    } catch {
-      return INITIAL_USERS;
-    }
+    const saved = localStorage.getItem('pakpost_users');
+    return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [reports, setReports] = useState<DailyReport[]>(() => {
-    try {
-      const saved = localStorage.getItem('pakpost_reports');
-      const rawList: DailyReport[] = saved ? JSON.parse(saved) : INITIAL_REPORTS;
-      return cleanAndFilterReports(rawList);
-    } catch {
-      return cleanAndFilterReports(INITIAL_REPORTS);
-    }
+    const saved = localStorage.getItem('pakpost_reports');
+    const rawList: DailyReport[] = saved ? JSON.parse(saved) : INITIAL_REPORTS;
+    return cleanAndFilterReports(rawList);
   });
 
   const [whatsAppConfig, setWhatsAppConfig] = useState<WhatsAppConfig>(() => {
-    try {
-      const saved = localStorage.getItem('pakpost_whatsapp');
-      const cfg = saved ? JSON.parse(saved) : INITIAL_WHATSAPP_CONFIG;
-      if (!cfg.webAppUrl || cfg.webAppUrl.includes('YOUR_APP_ID') || cfg.webAppUrl.includes('example.com')) {
-        cfg.webAppUrl = INITIAL_WHATSAPP_CONFIG.webAppUrl;
-      }
-      return cfg;
-    } catch {
-      return INITIAL_WHATSAPP_CONFIG;
-    }
+    const saved = localStorage.getItem('pakpost_whatsapp');
+    return saved ? JSON.parse(saved) : INITIAL_WHATSAPP_CONFIG;
   });
 
   const [triggerConfig, setTriggerConfig] = useState<TriggerConfig>(() => {
-    try {
-      const saved = localStorage.getItem('pakpost_triggers');
-      return saved ? JSON.parse(saved) : INITIAL_TRIGGER_CONFIG;
-    } catch {
-      return INITIAL_TRIGGER_CONFIG;
-    }
+    const saved = localStorage.getItem('pakpost_triggers');
+    return saved ? JSON.parse(saved) : INITIAL_TRIGGER_CONFIG;
   });
 
   const [logs, setLogs] = useState<SystemLog[]>([
@@ -168,24 +138,9 @@ export default function App() {
     },
   ]);
 
-  // Handle URL deep links: path-based (/daily-reports, /dashboard) or query-based (?tab=... or ?office=...)
+  // If Admin is logged in, show Dashboard by default
+  // If Public user, show Submit Daily Report by default for quick data filling
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
-    try {
-      const path = window.location.pathname.replace(/^\/+/, '').toLowerCase();
-      if (path === 'daily-reports' || path === 'report' || path === 'submit') return 'daily-reports';
-      if (path === 'reports' || path === 'admin-reports' || path === 'list') return 'admin-reports';
-      if (path === 'dashboard') return 'dashboard';
-      if (path === 'pending' || path === 'pending-reports') return 'pending-reports';
-      if (path === 'offices' || path === 'post-offices') return 'post-offices';
-      if (path === 'holidays') return 'holidays';
-      if (path === 'pdf' || path === 'pdf-exports' || path === 'export') return 'pdf-exports';
-      if (path === 'whatsapp' || path === 'whatsapp-triggers' || path === 'settings') return 'whatsapp-triggers';
-
-      const params = new URLSearchParams(window.location.search);
-      const tabParam = params.get('tab');
-      if (tabParam) return tabParam as NavTab;
-      if (params.get('office') || params.get('po')) return 'daily-reports';
-    } catch {}
     return currentUser?.role === 'ADMIN' ? 'dashboard' : 'daily-reports';
   });
   const [selectedDate, setSelectedDate] = useState<string>(today);
@@ -193,12 +148,8 @@ export default function App() {
 
   // Auto-Refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('pakpost_auto_refresh');
-      return saved ? JSON.parse(saved) : true;
-    } catch {
-      return true;
-    }
+    const saved = localStorage.getItem('pakpost_auto_refresh');
+    return saved ? JSON.parse(saved) : true;
   });
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(new Date());
 
@@ -228,14 +179,13 @@ export default function App() {
 
     const unsubOffices = subscribeToPostOffices(
       (cloudOffices) => {
-        // Cloud Firestore is authoritative. Never merge with stale local data!
-        const cleaned = cleanAndFilterPostOffices(cloudOffices || []);
-        setPostOffices(cleaned);
-        postOfficesRef.current = cleaned;
-        try {
-          localStorage.setItem('pakpost_offices', JSON.stringify(cleaned));
-        } catch {}
-        setLastRefreshedAt(new Date());
+        if (cloudOffices && cloudOffices.length > 0) {
+          const merged = mergeOfficesPreservingData(postOfficesRef.current, cleanAndFilterPostOffices(cloudOffices));
+          setPostOffices(merged);
+          setLastRefreshedAt(new Date());
+        } else if (postOfficesRef.current.length > 0) {
+          syncAllOfficesToCloud(postOfficesRef.current);
+        }
       },
       (err) => {
         console.warn('Realtime cloud offices subscription:', err);
@@ -244,12 +194,10 @@ export default function App() {
 
     const unsubReports = subscribeToDailyReports(
       (cloudReports) => {
-        const cleaned = cleanAndFilterReports(cloudReports || []);
-        setReports(cleaned);
-        try {
-          localStorage.setItem('pakpost_reports', JSON.stringify(cleaned));
-        } catch {}
-        setLastRefreshedAt(new Date());
+        if (cloudReports && cloudReports.length > 0) {
+          setReports(cleanAndFilterReports(cloudReports));
+          setLastRefreshedAt(new Date());
+        }
       },
       (err) => {
         console.warn('Realtime cloud reports subscription:', err);
@@ -301,28 +249,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pakpost_offices', JSON.stringify(postOffices));
   }, [postOffices]);
-
-  // Guarantee every office has a valid createdDate, ensuring newly added offices only count from their addition date
-  useEffect(() => {
-    if (postOffices.length === 0) return;
-    let hasMissing = false;
-    const filled = postOffices.map((po) => {
-      if (!po.createdDate) {
-        hasMissing = true;
-        return {
-          ...po,
-          createdDate: getOfficeEffectiveStartDate(po, reports),
-        };
-      }
-      return po;
-    });
-
-    if (hasMissing) {
-      const cleaned = cleanAndFilterPostOffices(filled);
-      setPostOffices(cleaned);
-      syncAllOfficesToCloud(cleaned);
-    }
-  }, [postOffices.length, reports.length]);
 
   useEffect(() => {
     localStorage.setItem('pakpost_reports', JSON.stringify(reports));
@@ -385,10 +311,8 @@ export default function App() {
 
     if (existingRep || (isEdit && editingReport)) {
       const targetId = existingRep?.id || editingReport?.id || `rep-${reportDateIso}-${officeNameSafe}`;
-      const baseRecord = existingRep || editingReport;
       const updatedReportRecord: DailyReport = {
-        submittedAt: baseRecord?.submittedAt || new Date().toISOString(),
-        ...(baseRecord || {}),
+        ...(existingRep || editingReport || {}),
         ...reportData,
         date: reportDateIso,
         id: targetId,
@@ -450,35 +374,30 @@ export default function App() {
   // Master Data Office CRUD
   const handleSaveOffice = (office: PostOffice) => {
     if (!office.name || isInvalidPostOfficeName(office.name)) return;
-    const officeToSave: PostOffice = {
-      ...office,
-      createdDate: office.createdDate || getTodayDateString(),
-    };
     let updated: PostOffice[];
-    const targetNameLower = (officeToSave.name || '').toLowerCase().trim();
+    const targetNameLower = (office.name || '').toLowerCase().trim();
     const exists = postOffices.some(
-      (p) => p.id === officeToSave.id || (p.name || '').toLowerCase().trim() === targetNameLower
+      (p) => p.id === office.id || (p.name || '').toLowerCase().trim() === targetNameLower
     );
     if (exists) {
       updated = postOffices.map((p) => {
-        if (p.id === officeToSave.id || (p.name || '').toLowerCase().trim() === targetNameLower) {
+        if (p.id === office.id || (p.name || '').toLowerCase().trim() === targetNameLower) {
           return {
             ...p,
-            ...officeToSave,
-            createdDate: officeToSave.createdDate || p.createdDate || getOfficeEffectiveStartDate(p, reports),
-            mobileNumber: officeToSave.mobileNumber !== undefined ? officeToSave.mobileNumber : p.mobileNumber,
+            ...office,
+            mobileNumber: office.mobileNumber !== undefined ? office.mobileNumber : p.mobileNumber,
           };
         }
         return p;
       });
-      logAction('MASTER_OFFICE_UPDATE', `Updated office master record for ${officeToSave.name} with contact ${officeToSave.mobileNumber || 'N/A'}`);
+      logAction('MASTER_OFFICE_UPDATE', `Updated office master record for ${office.name} with contact ${office.mobileNumber || 'N/A'}`);
     } else {
-      updated = [...postOffices, officeToSave];
-      logAction('MASTER_OFFICE_ADD', `Added new post office: ${officeToSave.name} (Effective Date: ${officeToSave.createdDate}) with contact ${officeToSave.mobileNumber || 'N/A'}`);
+      updated = [...postOffices, office];
+      logAction('MASTER_OFFICE_ADD', `Added new post office: ${office.name} with contact ${office.mobileNumber || 'N/A'}`);
     }
     const cleaned = cleanAndFilterPostOffices(updated);
     setPostOffices(cleaned);
-    savePostOfficeToCloud(officeToSave);
+    savePostOfficeToCloud(office);
   };
 
   const handleToggleOfficeStatus = (officeId: string) => {
@@ -502,45 +421,27 @@ export default function App() {
     logAction('MASTER_OFFICE_DELETE', `Deleted post office: ${target?.name || officeId}`, 'WARNING');
   };
 
-  const handleBulkImportOffices = async (imported: PostOffice[], replaceExisting: boolean) => {
+  const handleBulkImportOffices = (imported: PostOffice[], replaceExisting: boolean) => {
     const validImported = cleanAndFilterPostOffices(imported);
-    let finalOffices: PostOffice[];
+    let combined: PostOffice[];
     if (replaceExisting) {
-      // Remove previous offices from cloud if replacing completely
-      const currentList = [...postOffices];
-      for (const po of currentList) {
-        if (!validImported.some((v) => (v.name || '').toLowerCase().trim() === (po.name || '').toLowerCase().trim())) {
-          deletePostOfficeFromCloud(po.id).catch(() => {});
-        }
-      }
-      finalOffices = validImported;
+      combined = mergeOfficesPreservingData(postOffices, validImported);
     } else {
-      finalOffices = mergeOfficesPreservingData(postOffices, validImported);
+      combined = mergeOfficesPreservingData(postOffices, validImported);
     }
-    const cleaned = cleanAndFilterPostOffices(finalOffices);
+    const cleaned = cleanAndFilterPostOffices(combined);
     setPostOffices(cleaned);
-    postOfficesRef.current = cleaned;
-    try {
-      localStorage.setItem('pakpost_offices', JSON.stringify(cleaned));
-    } catch {}
-    await syncAllOfficesToCloud(cleaned);
+    syncAllOfficesToCloud(cleaned);
     logAction(
       'MASTER_OFFICE_BULK_IMPORT',
-      `Imported ${validImported.length} offices (${replaceExisting ? 'Replaced old offices' : 'Appended to existing'}).`
+      `Imported ${validImported.length} offices (${replaceExisting ? 'Updated existing' : 'Appended'}) with preserved contact details.`
     );
   };
 
-  const handleClearAllOffices = async () => {
-    const listToDelete = [...postOffices];
+  const handleClearAllOffices = () => {
+    postOffices.forEach((po) => deletePostOfficeFromCloud(po.id));
     setPostOffices([]);
-    postOfficesRef.current = [];
-    try {
-      localStorage.removeItem('pakpost_offices');
-    } catch {}
-    for (const po of listToDelete) {
-      await deletePostOfficeFromCloud(po.id).catch(() => {});
-    }
-    logAction('MASTER_OFFICE_CLEAR_ALL', 'Cleared all post offices from master directory and cloud', 'WARNING');
+    logAction('MASTER_OFFICE_CLEAR_ALL', 'Cleared all post offices from master directory', 'WARNING');
   };
 
   const handleResetDefaultOffices = () => {
@@ -730,7 +631,6 @@ export default function App() {
           {activeTab === 'post-offices' && (
             <PostOfficesManager
               postOffices={postOffices}
-              reports={reports}
               onSaveOffice={handleSaveOffice}
               onDeleteOffice={handleDeleteOffice}
               onToggleStatus={handleToggleOfficeStatus}
