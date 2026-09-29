@@ -137,7 +137,11 @@ export default function App() {
   const [whatsAppConfig, setWhatsAppConfig] = useState<WhatsAppConfig>(() => {
     try {
       const saved = localStorage.getItem('pakpost_whatsapp');
-      return saved ? JSON.parse(saved) : INITIAL_WHATSAPP_CONFIG;
+      const cfg = saved ? JSON.parse(saved) : INITIAL_WHATSAPP_CONFIG;
+      if (!cfg.webAppUrl || cfg.webAppUrl.includes('YOUR_APP_ID') || cfg.webAppUrl.includes('example.com')) {
+        cfg.webAppUrl = INITIAL_WHATSAPP_CONFIG.webAppUrl;
+      }
+      return cfg;
     } catch {
       return INITIAL_WHATSAPP_CONFIG;
     }
@@ -164,9 +168,24 @@ export default function App() {
     },
   ]);
 
-  // If Admin is logged in, show Dashboard by default
-  // If Public user, show Submit Daily Report by default for quick data filling
+  // Handle URL deep links: path-based (/daily-reports, /dashboard) or query-based (?tab=... or ?office=...)
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    try {
+      const path = window.location.pathname.replace(/^\/+/, '').toLowerCase();
+      if (path === 'daily-reports' || path === 'report' || path === 'submit') return 'daily-reports';
+      if (path === 'reports' || path === 'admin-reports' || path === 'list') return 'admin-reports';
+      if (path === 'dashboard') return 'dashboard';
+      if (path === 'pending' || path === 'pending-reports') return 'pending-reports';
+      if (path === 'offices' || path === 'post-offices') return 'post-offices';
+      if (path === 'holidays') return 'holidays';
+      if (path === 'pdf' || path === 'pdf-exports' || path === 'export') return 'pdf-exports';
+      if (path === 'whatsapp' || path === 'whatsapp-triggers' || path === 'settings') return 'whatsapp-triggers';
+
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) return tabParam as NavTab;
+      if (params.get('office') || params.get('po')) return 'daily-reports';
+    } catch {}
     return currentUser?.role === 'ADMIN' ? 'dashboard' : 'daily-reports';
   });
   const [selectedDate, setSelectedDate] = useState<string>(today);
