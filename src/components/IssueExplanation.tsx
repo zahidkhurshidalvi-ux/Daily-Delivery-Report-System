@@ -24,7 +24,12 @@ import {
   Phone,
   Send,
 } from 'lucide-react';
-import jsPDF from 'jspdf';
+import type { jsPDF } from 'jspdf';
+
+async function getJsPDF(): Promise<any> {
+  const mod = await import('jspdf');
+  return mod.jsPDF || mod.default || mod;
+}
 
 interface IssueExplanationProps {
   postOffices: PostOffice[];
@@ -251,12 +256,13 @@ In case of failure to submit the explanation within the stipulated time, discipl
   };
 
   // Generate Standard Printable A4 PDF for single office
-  const generatePDFForOffice = (
+  const generatePDFForOffice = async (
     office: PostOffice,
     missingDates: string[],
     customPmName?: string
   ) => {
-    const doc = new jsPDF({
+    const JsPdfClass = await getJsPDF();
+    const doc: jsPDF = new JsPdfClass({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
@@ -277,14 +283,14 @@ In case of failure to submit the explanation within the stipulated time, discipl
   };
 
   // Generate Combined PDF for ALL Pending Offices (One page per office)
-  const generateAllPDFs = () => {
+  const generateAllPDFs = async () => {
     const pendingList = officeEntries.filter((item) => item.pendingCount > 0);
     if (pendingList.length === 0) {
-      alert('No pending offices found to generate explanation letters.');
       return;
     }
 
-    const doc = new jsPDF({
+    const JsPdfClass = await getJsPDF();
+    const doc: jsPDF = new JsPdfClass({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',

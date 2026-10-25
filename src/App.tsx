@@ -40,18 +40,17 @@ import { DailyReportForm } from './components/DailyReportForm';
 import { LoginModal } from './components/LoginModal';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
 
-// Code-split heavy dashboard, tables, and reporting tools to prevent mobile browser memory crashes
-const Dashboard = React.lazy(() => import('./components/Dashboard').then((m) => ({ default: m.Dashboard })));
-const ReportsList = React.lazy(() => import('./components/ReportsList').then((m) => ({ default: m.ReportsList })));
-const PostOfficesManager = React.lazy(() => import('./components/PostOfficesManager').then((m) => ({ default: m.PostOfficesManager })));
-const ReportFieldsManager = React.lazy(() => import('./components/ReportFieldsManager').then((m) => ({ default: m.ReportFieldsManager })));
-const PendingReports = React.lazy(() => import('./components/PendingReports').then((m) => ({ default: m.PendingReports })));
-const HolidayManager = React.lazy(() => import('./components/HolidayManager').then((m) => ({ default: m.HolidayManager })));
-const PdfExportView = React.lazy(() => import('./components/PdfExportView').then((m) => ({ default: m.PdfExportView })));
-const WhatsAppAndTriggers = React.lazy(() => import('./components/WhatsAppAndTriggers').then((m) => ({ default: m.WhatsAppAndTriggers })));
-const UserManagement = React.lazy(() => import('./components/UserManagement').then((m) => ({ default: m.UserManagement })));
-const IssueExplanation = React.lazy(() => import('./components/IssueExplanation').then((m) => ({ default: m.IssueExplanation })));
-const SystemLogs = React.lazy(() => import('./components/SystemLogs').then((m) => ({ default: m.SystemLogs })));
+import { Dashboard } from './components/Dashboard';
+import { ReportsList } from './components/ReportsList';
+import { PostOfficesManager } from './components/PostOfficesManager';
+import { ReportFieldsManager } from './components/ReportFieldsManager';
+import { PendingReports } from './components/PendingReports';
+import { HolidayManager } from './components/HolidayManager';
+import { PdfExportView } from './components/PdfExportView';
+import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
+import { UserManagement } from './components/UserManagement';
+import { IssueExplanation } from './components/IssueExplanation';
+import { SystemLogs } from './components/SystemLogs';
 
 // Helper function to merge two post office lists preserving contact numbers and mobile numbers
 function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[]): PostOffice[] {
@@ -618,15 +617,7 @@ export default function App() {
 
         {/* Content Area */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl">
-          <React.Suspense
-            fallback={
-              <div className="flex flex-col items-center justify-center p-12 text-[#00401A]">
-                <div className="w-8 h-8 border-3 border-[#00401A] border-t-transparent rounded-full animate-spin mb-3"></div>
-                <p className="text-xs font-semibold text-slate-600">لوڈ ہو رہا ہے... (Loading view)</p>
-              </div>
-            }
-          >
-            {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && (
             <Dashboard
               reports={reports}
               postOffices={postOffices}
@@ -756,7 +747,6 @@ export default function App() {
           )}
 
           {activeTab === 'logs' && <SystemLogs logs={logs} />}
-          </React.Suspense>
         </main>
       </div>
     </div>
