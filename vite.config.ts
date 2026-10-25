@@ -26,9 +26,6 @@ export default defineConfig(() => {
             if (id.includes('node_modules/firebase')) {
               return 'firebase';
             }
-            if (id.includes('node_modules/recharts')) {
-              return 'charts';
-            }
             if (id.includes('node_modules/lucide-react')) {
               return 'icons';
             }

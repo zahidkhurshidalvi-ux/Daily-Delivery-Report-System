@@ -218,13 +218,6 @@ export default function App() {
 
   // 1. Permanent Real-time Cloud Subscriptions across all Mobile & Desktop devices
   useEffect(() => {
-    // Immediate direct pull from Cloud Firestore on mount
-    fetchAllDailyReportsFromCloud().then((cloudReps) => {
-      if (cloudReps && cloudReps.length > 0) {
-        setReports(cloudReps);
-        setLastRefreshedAt(new Date());
-      }
-    });
 
     const unsubOffices = subscribeToPostOffices(
       (cloudOffices) => {
