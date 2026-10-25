@@ -8,8 +8,9 @@ import {
   getDocs,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { PostOffice, DailyReport, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig, OfficialHoliday } from '../types';
+import { PostOffice, DailyReport, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig, OfficialHoliday, ArticleCategoryConfig } from '../types';
 import { cleanAndFilterPostOffices, cleanAndFilterReports, SYSTEM_LAUNCH_DATE, setInMemoryHolidays } from '../utils/calculations';
+import { DEFAULT_ARTICLE_CATEGORIES } from '../data/initialData';
 
 const POST_OFFICES_COL = 'postOffices';
 const DAILY_REPORTS_COL = 'dailyReports';
@@ -47,15 +48,15 @@ export function subscribeToPostOffices(
             mobileNumber: data.mobileNumber || '',
             status: data.status || 'ACTIVE',
             initialBalance: typeof data.initialBalance === 'number' ? data.initialBalance : 0,
+            postmen: Array.isArray(data.postmen) ? data.postmen : [],
           });
         }
       });
       onUpdate(cleanAndFilterPostOffices(offices));
     },
     (error) => {
-      console.error('Realtime Post Offices error:', error);
+      console.warn('Realtime Post Offices listener notice (offline or sync delay):', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.LIST, POST_OFFICES_COL);
     }
   );
 }
@@ -81,6 +82,8 @@ export async function fetchAllDailyReportsFromCloud(): Promise<DailyReport[]> {
           date: data.date,
           officeName: data.officeName || data.postOfficeName,
           postmasterName: data.postmasterName || 'Postmaster',
+          postmanId: data.postmanId || '',
+          postmanName: data.postmanName || '',
           lastBalance: Number(data.lastBalance) || 0,
           receivedToday: Number(data.receivedToday ?? data.received) || 0,
           delivered: Number(data.delivered) || 0,
@@ -91,6 +94,10 @@ export async function fetchAllDailyReportsFromCloud(): Promise<DailyReport[]> {
           remarks: data.remarks || '',
           submittedAt: data.submittedAt || new Date().toISOString(),
           submittedBy: data.submittedBy || 'Postmaster',
+          receivedBreakdown: data.receivedBreakdown || {},
+          deliveredBreakdown: data.deliveredBreakdown || {},
+          emttsUpdated: typeof data.emttsUpdated === 'number' ? data.emttsUpdated : 0,
+          emttsNotUpdated: typeof data.emttsNotUpdated === 'number' ? data.emttsNotUpdated : 0,
         });
       }
     });
@@ -126,6 +133,8 @@ export function subscribeToDailyReports(
             date: data.date,
             officeName: data.officeName || data.postOfficeName,
             postmasterName: data.postmasterName || 'Postmaster',
+            postmanId: data.postmanId || '',
+            postmanName: data.postmanName || '',
             lastBalance: Number(data.lastBalance) || 0,
             receivedToday: Number(data.receivedToday ?? data.received) || 0,
             delivered: Number(data.delivered) || 0,
@@ -136,15 +145,18 @@ export function subscribeToDailyReports(
             remarks: data.remarks || '',
             submittedAt: data.submittedAt || new Date().toISOString(),
             submittedBy: data.submittedBy || 'Postmaster',
+            receivedBreakdown: data.receivedBreakdown || {},
+            deliveredBreakdown: data.deliveredBreakdown || {},
+            emttsUpdated: typeof data.emttsUpdated === 'number' ? data.emttsUpdated : 0,
+            emttsNotUpdated: typeof data.emttsNotUpdated === 'number' ? data.emttsNotUpdated : 0,
           });
         }
       });
       onUpdate(cleanAndFilterReports(reports));
     },
     (error) => {
-      console.error('Realtime Daily Reports error:', error);
+      console.warn('Realtime Daily Reports listener notice (offline or sync delay):', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.LIST, DAILY_REPORTS_COL);
     }
   );
 }
@@ -165,6 +177,7 @@ export async function savePostOfficeToCloud(office: PostOffice): Promise<void> {
         mobileNumber: office.mobileNumber || '',
         status: office.status || 'ACTIVE',
         initialBalance: Number(office.initialBalance) || 0,
+        postmen: Array.isArray(office.postmen) ? office.postmen : [],
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
@@ -206,6 +219,7 @@ export async function syncAllOfficesToCloud(offices: PostOffice[]): Promise<void
           mobileNumber: po.mobileNumber || '',
           status: po.status || 'ACTIVE',
           initialBalance: Number(po.initialBalance) || 0,
+          postmen: Array.isArray(po.postmen) ? po.postmen : [],
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -219,7 +233,7 @@ export async function syncAllOfficesToCloud(offices: PostOffice[]): Promise<void
 
 /**
  * Save / Submit a Daily Report to Cloud Firestore
- * Guaranteed to save with both officeName and postOfficeName, receivedToday and received
+ * Guaranteed to save with both officeName and postOfficeName, receivedToday and received, and category breakdowns
  */
 export async function saveDailyReportToCloud(report: DailyReport): Promise<void> {
   const officeNameSafe = (report.officeName || 'office').replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -238,6 +252,12 @@ export async function saveDailyReportToCloud(report: DailyReport): Promise<void>
         returned: report.returnedToSender,
         returnedToSender: report.returnedToSender,
         submittedAt: report.submittedAt || new Date().toISOString(),
+        receivedBreakdown: report.receivedBreakdown || {},
+        deliveredBreakdown: report.deliveredBreakdown || {},
+        emttsUpdated: typeof report.emttsUpdated === 'number' ? report.emttsUpdated : 0,
+        emttsNotUpdated: typeof report.emttsNotUpdated === 'number' ? report.emttsNotUpdated : 0,
+        postmanId: report.postmanId || '',
+        postmanName: report.postmanName || '',
       },
       { merge: true }
     );
@@ -398,3 +418,54 @@ export async function fetchHolidaysFromCloud(): Promise<Record<string, OfficialH
   }
   return {};
 }
+
+/**
+ * Save Article Categories configuration to Cloud Firestore
+ */
+export async function saveArticleCategoriesToCloud(
+  categories: ArticleCategoryConfig[]
+): Promise<void> {
+  const docRef = doc(db, APP_CONFIG_COL, 'article_categories');
+  try {
+    await setDoc(
+      docRef,
+      {
+        categories,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${APP_CONFIG_COL}/article_categories`);
+  }
+}
+
+/**
+ * Subscribe to Article Categories configuration in real time
+ */
+export function subscribeToArticleCategories(
+  onUpdate: (categories: ArticleCategoryConfig[]) => void,
+  onError?: (err: any) => void
+) {
+  const docRef = doc(db, APP_CONFIG_COL, 'article_categories');
+  return onSnapshot(
+    docRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && Array.isArray(data.categories) && data.categories.length > 0) {
+          onUpdate(data.categories);
+          return;
+        }
+      }
+      // Fallback to default categories if not yet stored
+      onUpdate(DEFAULT_ARTICLE_CATEGORIES);
+    },
+    (error) => {
+      console.warn('Realtime article categories listener error:', error);
+      if (onError) onError(error);
+      onUpdate(DEFAULT_ARTICLE_CATEGORIES);
+    }
+  );
+}
+

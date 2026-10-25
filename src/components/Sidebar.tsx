@@ -11,6 +11,7 @@ import {
   ScrollText,
   AlertTriangle,
   CalendarOff,
+  Sliders,
 } from 'lucide-react';
 
 export type NavTab =
@@ -21,6 +22,7 @@ export type NavTab =
   | 'holidays'
   | 'pdf-exports'
   | 'post-offices'
+  | 'report-fields'
   | 'users'
   | 'issue-explanation'
   | 'whatsapp-triggers'
@@ -55,9 +57,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             role: 'ADMIN',
             badge: pendingCount > 0 ? pendingCount : null,
           },
+          { id: 'report-fields', label: 'Report Fields & Categories', icon: Sliders, role: 'ADMIN' },
+          { id: 'post-offices', label: 'Post Offices Master', icon: Building, role: 'ADMIN' },
           { id: 'holidays', label: 'Holidays & Closures', icon: CalendarOff, role: 'ADMIN' },
           { id: 'pdf-exports', label: 'PDF & Excel Reports', icon: FileDown, role: 'ADMIN' },
-          { id: 'post-offices', label: 'Post Offices Master', icon: Building, role: 'ADMIN' },
           { id: 'users', label: 'User Accounts', icon: Users, role: 'ADMIN' },
           {
             id: 'issue-explanation',

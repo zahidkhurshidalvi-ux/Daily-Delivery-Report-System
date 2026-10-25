@@ -1,15 +1,20 @@
-import jsPDF from 'jspdf';
-
+import type { jsPDF } from 'jspdf';
 import { DailyReport, PostOffice } from '../types';
 import { formatDatePK, formatNumber, summarizeReports, isSunday, isHoliday, getHolidayReason, getDayOfWeek } from './calculations';
 
-export function generateDailyReportPDF(
+async function getJsPDF(): Promise<any> {
+  const mod = await import('jspdf');
+  return (mod.jsPDF || mod.default || mod) as any;
+}
+
+export async function generateDailyReportPDF(
   reports: DailyReport[],
   reportDate: string,
   divisionName: string = 'Gujranwala Division',
   customTitle?: string
-) {
-  const doc = new jsPDF({
+): Promise<jsPDF> {
+  const jsPDFClass = await getJsPDF();
+  const doc: jsPDF = new jsPDFClass({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',
@@ -286,11 +291,12 @@ export function generateDailyReportPDF(
 /**
  * Generates an official A4 Portrait PDF summary of ALL DATES consolidated delivery records.
  */
-export function generateAllDatesReportPDF(
+export async function generateAllDatesReportPDF(
   reports: DailyReport[],
   divisionName: string = 'Gujranwala Division'
-) {
-  const doc = new jsPDF({
+): Promise<jsPDF> {
+  const jsPDFClass = await getJsPDF();
+  const doc: jsPDF = new jsPDFClass({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',
@@ -571,7 +577,7 @@ export function generateAllDatesReportPDF(
 /**
  * Generates an official A4 Portrait PDF summary of all pending post offices for Divisional Supervisors.
  */
-export function generatePendingReportPDF(
+export async function generatePendingReportPDF(
   pendingList: {
     office: PostOffice;
     lastReportDate?: string;
@@ -579,8 +585,9 @@ export function generatePendingReportPDF(
   }[],
   reportDate: string,
   divisionName: string = 'Gujranwala Division'
-) {
-  const doc = new jsPDF({
+): Promise<jsPDF> {
+  const jsPDFClass = await getJsPDF();
+  const doc: jsPDF = new jsPDFClass({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',
@@ -1005,22 +1012,10 @@ export function triggerPrintablePendingWindow(
     </html>
   `;
 
-  try {
-    const printWindow = window.open('', '_blank');
-    if (printWindow && !printWindow.closed) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-      }, 400);
-      return;
-    }
-  } catch (e) {
-    console.warn('Popup blocked, using hidden iframe printing mechanism:', e);
-  }
+  printHtmlDocument(html);
+}
 
-  // Fallback iframe
+function printHtmlDocument(html: string) {
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.right = '0';
@@ -1037,7 +1032,11 @@ export function triggerPrintablePendingWindow(
     doc.close();
     iframe.contentWindow?.focus();
     setTimeout(() => {
-      iframe.contentWindow?.print();
+      try {
+        iframe.contentWindow?.print();
+      } catch (e) {
+        console.warn('Print failed', e);
+      }
       setTimeout(() => {
         try {
           document.body.removeChild(iframe);

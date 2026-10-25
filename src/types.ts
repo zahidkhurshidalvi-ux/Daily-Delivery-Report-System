@@ -9,6 +9,15 @@ export interface User {
   name: string;
 }
 
+export interface Postman {
+  id: string;
+  name: string;
+  beatNo?: string; // Beat / Area No.
+  mobileNumber?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  notes?: string;
+}
+
 export interface PostOffice {
   id: string;
   name: string;
@@ -16,6 +25,24 @@ export interface PostOffice {
   mobileNumber: string;
   status: 'ACTIVE' | 'INACTIVE';
   initialBalance: number;
+  createdDate?: string;
+  postmen?: Postman[]; // Postmen registered for this office
+}
+
+export interface ArticleCategoryConfig {
+  id: string; // unique ID
+  key: string; // slug key e.g. 'rgl', 'parcel', 'ums'
+  label: string; // e.g. 'RGL (Intl/dom/ins)'
+  code?: string;
+  description?: string;
+  requiresEmtts?: boolean; // trackable on EMTTS
+  enabled: boolean;
+  sortOrder: number;
+  isSystemDefault?: boolean;
+}
+
+export interface CategoryBreakdown {
+  [categoryKey: string]: number;
 }
 
 export interface DailyReport {
@@ -23,6 +50,8 @@ export interface DailyReport {
   date: string; // YYYY-MM-DD
   officeName: string;
   postmasterName: string;
+  postmanId?: string;
+  postmanName?: string;
   lastBalance: number;
   receivedToday: number;
   delivered: number;
@@ -31,10 +60,18 @@ export interface DailyReport {
   deposit: number;
   closingBalance: number; // Automatically calculated
   remarks: string;
-  submittedAt: string; // ISO string or timestamp
+  submittedAt?: string; // ISO string or timestamp
   updatedAt?: string;
   submittedBy: string;
   officeCode?: string;
+
+  // Detailed Category Breakdowns
+  receivedBreakdown?: CategoryBreakdown;
+  deliveredBreakdown?: CategoryBreakdown;
+
+  // EMTTS Barcode / Track & Trace Articles status
+  emttsUpdated?: number;
+  emttsNotUpdated?: number;
 }
 
 export interface WhatsAppConfig {

@@ -1,4 +1,4 @@
-import { PostOffice, DailyReport, User, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig } from '../types';
+import { PostOffice, DailyReport, User, TriggerConfig, WhatsAppConfig, GoogleSheetsConfig, ArticleCategoryConfig } from '../types';
 import { getTodayDateString, calculateClosingBalance } from '../utils/calculations';
 
 // Clean empty initial post offices by default (actual offices load permanently from Google Sheets/LocalStorage)
@@ -12,6 +12,109 @@ const today = getTodayDateString();
 
 // Clean empty initial reports by default (no dummy records deployed to GitHub/production)
 export const INITIAL_REPORTS: DailyReport[] = [];
+
+// Standard Pakistan Post Article Categories specified by user
+export const DEFAULT_ARTICLE_CATEGORIES: ArticleCategoryConfig[] = [
+  {
+    id: 'cat-rgl',
+    key: 'rgl',
+    label: 'RGL (Intl/dom/ins)',
+    code: 'RGL',
+    description: 'Registered Letter (International / Domestic / Insured)',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 1,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-parcel',
+    key: 'parcel',
+    label: 'Parcel (Intl/dom/ins)',
+    code: 'PARCEL',
+    description: 'Parcel Post (International / Domestic / Insured)',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 2,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-ums',
+    key: 'ums',
+    label: 'UMS',
+    code: 'UMS',
+    description: 'Urgent Mail Service (Express Speed Post)',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 3,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-ordinary',
+    key: 'ordinary',
+    label: 'Ordinary',
+    code: 'ORD',
+    description: 'Ordinary Unregistered Letters & Postcards',
+    requiresEmtts: false,
+    enabled: true,
+    sortOrder: 4,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-excise',
+    key: 'excise',
+    label: 'Excise',
+    code: 'EXCISE',
+    description: 'Excise & Taxation Vehicle Smart Cards / Books',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 5,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-vpp',
+    key: 'vpp',
+    label: 'VPP/VPL',
+    code: 'VPP',
+    description: 'Value Payable Post / Value Payable Letter',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 6,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-mo',
+    key: 'money_order',
+    label: 'Money Order',
+    code: 'MO',
+    description: 'Electronic Money Order (eMO) & General MO',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 7,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-echallan',
+    key: 'echallan',
+    label: 'E-Challan',
+    code: 'ECHALLAN',
+    description: 'Traffic Police Safe City E-Challans',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 8,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-cod',
+    key: 'cod',
+    label: 'COD',
+    code: 'COD',
+    description: 'Cash On Delivery E-Commerce Parcels',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 9,
+    isSystemDefault: true,
+  },
+];
 
 export const INITIAL_WHATSAPP_CONFIG: WhatsAppConfig = {
   phoneNumberId: '109823748912734',
@@ -37,4 +140,5 @@ export const INITIAL_GOOGLE_SHEETS_CONFIG: GoogleSheetsConfig = {
   autoSyncEnabled: true,
   sheetName: 'Daily Delivery Reports',
 };
+
 

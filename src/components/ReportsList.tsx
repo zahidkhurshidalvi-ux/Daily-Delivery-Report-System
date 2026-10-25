@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DailyReport, PostOffice, User } from '../types';
+import { DailyReport, PostOffice, User, ArticleCategoryConfig } from '../types';
 import { formatNumber, formatDatePK, getTodayDateString, cleanAndFilterPostOffices, cleanAndFilterReports } from '../utils/calculations';
 import {
   Edit2,
@@ -16,6 +16,10 @@ import {
   Calendar,
   AlertTriangle,
   Clock,
+  Eye,
+  X,
+  ShieldCheck,
+  UserCheck,
 } from 'lucide-react';
 import { exportDailyReportsToExcel } from '../utils/excelExport';
 import { triggerPrintableWindow } from '../utils/pdfGenerator';
@@ -23,6 +27,7 @@ import { triggerPrintableWindow } from '../utils/pdfGenerator';
 interface ReportsListProps {
   reports: DailyReport[];
   postOffices?: PostOffice[];
+  categories?: ArticleCategoryConfig[];
   selectedDate?: string;
   setSelectedDate?: (date: string) => void;
   currentUser: User | null;
@@ -47,6 +52,7 @@ type SortField =
 export const ReportsList: React.FC<ReportsListProps> = ({
   reports,
   postOffices = [],
+  categories = [],
   currentUser,
   onEditReport,
   onDeleteReport,
@@ -65,6 +71,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({
 
   // Confirmation modal state for admin deletion
   const [reportToDelete, setReportToDelete] = useState<DailyReport | null>(null);
+  // View details modal state
+  const [viewingReport, setViewingReport] = useState<DailyReport | null>(null);
 
   const validOffices = cleanAndFilterPostOffices(postOffices);
   const validReports = cleanAndFilterReports(reports);
@@ -726,7 +734,12 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                         {formatDatePK(report.date)}
                       </td>
                       <td className="p-2.5 font-extrabold text-gray-900">
-                        {report.officeName}
+                        <span>{report.officeName}</span>
+                        {report.postmanName && (
+                          <span className="block text-[10px] text-gray-500 font-normal mt-0.5">
+                            Postman: <strong className="text-gray-700">{report.postmanName}</strong>
+                          </span>
+                        )}
                       </td>
                       <td className="p-2.5 text-right text-gray-600 font-mono">{formatNumber(report.lastBalance)}</td>
                       <td className="p-2.5 text-right font-bold text-[#006633] font-mono">
@@ -752,6 +765,14 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                       <td className="p-2.5 text-right text-blue-600 font-semibold font-mono">{formatNumber(report.deposit)}</td>
                       <td className="p-2.5 text-center whitespace-nowrap no-print">
                         <div className="flex items-center justify-center space-x-1.5">
+                          <button
+                            onClick={() => setViewingReport(report)}
+                            className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md border border-blue-200 transition-colors cursor-pointer"
+                            title="View Full Breakdown & EMTTS Status"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
                           {canEdit ? (
                             <button
                               onClick={() => onEditReport(report)}
@@ -809,6 +830,186 @@ export const ReportsList: React.FC<ReportsListProps> = ({
           </div>
         )}
       </div>
+
+      {/* Viewing Report Details & Category Breakdown Modal */}
+      {viewingReport && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in duration-200">
+            {/* Header */}
+            <div className="bg-[#00401A] text-white p-4.5 flex items-center justify-between border-b border-[#005522]">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 bg-yellow-400 text-[#00401A] rounded-lg flex items-center justify-center font-black">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold uppercase tracking-tight">
+                    {viewingReport.officeName} — Delivery Report Details
+                  </h3>
+                  <p className="text-xs text-emerald-200">
+                    Date: <strong className="text-white font-mono">{formatDatePK(viewingReport.date)}</strong>
+                    {viewingReport.postmanName ? ` • Postman: ${viewingReport.postmanName}` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingReport(null)}
+                className="text-white/80 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="bg-gray-50 border border-gray-200 p-2.5 rounded-lg">
+                  <span className="text-[10px] text-gray-500 font-bold block uppercase">Last Bal</span>
+                  <span className="text-base font-black font-mono text-gray-800">
+                    {formatNumber(viewingReport.lastBalance)}
+                  </span>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg">
+                  <span className="text-[10px] text-[#006633] font-bold block uppercase">Received</span>
+                  <span className="text-base font-black font-mono text-[#006633]">
+                    {formatNumber(viewingReport.receivedToday)}
+                  </span>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg">
+                  <span className="text-[10px] text-emerald-800 font-bold block uppercase">Delivered</span>
+                  <span className="text-base font-black font-mono text-emerald-800">
+                    {formatNumber(viewingReport.delivered)}
+                  </span>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-lg">
+                  <span className="text-[10px] text-blue-800 font-bold block uppercase">Deposit</span>
+                  <span className="text-base font-black font-mono text-blue-900">
+                    {formatNumber(viewingReport.deposit)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Category Breakdown Table (If report has breakdowns) */}
+              {viewingReport.receivedBreakdown && Object.keys(viewingReport.receivedBreakdown).length > 0 ? (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-100 px-3.5 py-2 font-black text-gray-800 text-[11px] uppercase flex items-center justify-between border-b border-gray-200">
+                    <span>Category Breakdown (بلحاظ کیٹیگری وصولی و ترسیل ڈاک)</span>
+                    <span className="text-[#006633] font-bold">Detailed Multi-Category</span>
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-[10px] border-b border-gray-200">
+                      <tr>
+                        <th className="p-2.5">Category Name</th>
+                        <th className="p-2.5 text-right">Received</th>
+                        <th className="p-2.5 text-right">Delivered</th>
+                        <th className="p-2.5 text-right">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-medium text-gray-800">
+                      {Object.entries(viewingReport.receivedBreakdown).map(([key, recVal]) => {
+                        const delVal = (viewingReport.deliveredBreakdown && viewingReport.deliveredBreakdown[key]) || 0;
+                        const matchingCat = categories.find((c) => c.key === key);
+                        const label = matchingCat ? matchingCat.label : key.toUpperCase();
+                        return (
+                          <tr key={key} className="hover:bg-gray-50/60">
+                            <td className="p-2.5 font-bold text-gray-900">{label}</td>
+                            <td className="p-2.5 text-right font-mono text-[#006633] font-bold">
+                              {formatNumber(Number(recVal) || 0)}
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-emerald-800 font-bold">
+                              {formatNumber(Number(delVal) || 0)}
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-gray-600">
+                              {formatNumber(Math.max(0, (Number(recVal) || 0) - (Number(delVal) || 0)))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-500 text-[11px]">
+                  ℹ️ This report was submitted in standard summary format (Total Received: {viewingReport.receivedToday}, Delivered: {viewingReport.delivered}). New reports include full 9-category breakdown.
+                </div>
+              )}
+
+              {/* Outcomes & EMTTS Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-1.5">
+                  <h4 className="font-bold text-gray-900 text-xs">Outcomes & Balances</h4>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Returned to Sender:</span>
+                    <strong className="font-mono text-red-700">{formatNumber(viewingReport.returnedToSender)}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Missent Articles:</span>
+                    <strong className="font-mono text-amber-700">{formatNumber(viewingReport.missent)}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Deposit / Undelivered:</span>
+                    <strong className="font-mono text-blue-700">{formatNumber(viewingReport.deposit)}</strong>
+                  </div>
+                  <div className="flex justify-between border-t border-gray-200 pt-1">
+                    <span className="text-gray-800 font-bold">Closing Balance:</span>
+                    <strong className="font-mono text-[#006633] font-black">{formatNumber(viewingReport.closingBalance)}</strong>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-200 space-y-1.5">
+                  <h4 className="font-bold text-blue-950 text-xs flex items-center space-x-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-700" />
+                    <span>EMTTS Track & Trace Status</span>
+                  </h4>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Updated on EMTTS:</span>
+                    <strong className="font-mono text-blue-900">{formatNumber(viewingReport.emttsUpdated || 0)}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Not Updated on EMTTS:</span>
+                    <strong className="font-mono text-amber-800">{formatNumber(viewingReport.emttsNotUpdated || 0)}</strong>
+                  </div>
+                  {viewingReport.remarks && (
+                    <div className="pt-1 text-[11px] text-gray-500 italic">
+                      Remarks: "{viewingReport.remarks}"
+                    </div>
+                  )}
+                  <div className="pt-1 text-[10px] text-gray-400">
+                    Submitted by: {viewingReport.submittedBy} at {new Date(viewingReport.submittedAt).toLocaleTimeString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex items-center justify-between">
+              <span className="text-gray-500 text-[11px]">
+                Report ID: <code className="font-mono">{viewingReport.id}</code>
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rep = viewingReport;
+                    setViewingReport(null);
+                    onEditReport(rep);
+                  }}
+                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs cursor-pointer flex items-center space-x-1"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Report</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewingReport(null)}
+                  className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-lg text-xs cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

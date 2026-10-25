@@ -39,5 +39,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isValidId(configId);
     }
+
+    // Health check / connection probe
+    match /_connection_probe/{id} {
+      allow read: if true;
+    }
   }
 }

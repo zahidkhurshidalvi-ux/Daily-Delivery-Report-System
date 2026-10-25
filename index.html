@@ -12,58 +12,70 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="PakPost Delivery" />
-    <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <script>
+      (function() {
+        window.__appLoaded = false;
+
+        // Unregister any obsolete service workers once
+        if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            for (var i = 0; i < regs.length; i++) {
+              regs[i].unregister();
+            }
+          }).catch(function() {});
+        }
+
+        function showEarlyNotice(msg) {
+          if (window.__appLoaded) return;
+          var notice = document.getElementById('early-error-notice');
+          if (notice) {
+            notice.style.display = 'block';
+            notice.innerText = 'سسٹم نوٹس: ' + (msg || 'عارضی کنکشن مسئلہ');
+          }
+          var retryBtn = document.getElementById('early-retry-btn');
+          if (retryBtn) {
+            retryBtn.style.display = 'inline-block';
+          }
+        }
+
+        window.addEventListener('error', function(e) {
+          showEarlyNotice((e && e.message) ? e.message : 'اسکرپٹ ایرر');
+        });
+
+        window.addEventListener('unhandledrejection', function(e) {
+          var reason = e && e.reason ? (e.reason.message || String(e.reason)) : 'پرومس ایرر';
+          console.warn('Unhandled rejection:', reason);
+        });
+
+        // 3.5s watchdog fallback: if React has not mounted, show reload option
+        setTimeout(function() {
+          if (!window.__appLoaded) {
+            var retryBtn = document.getElementById('early-retry-btn');
+            if (retryBtn) {
+              retryBtn.style.display = 'inline-block';
+            }
+          }
+        }, 3500);
+      })();
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #F0F2F5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #00401A; text-align: center; padding: 16px;">
+        <div style="width: 44px; height: 44px; border: 4px solid #00401A; border-top-color: transparent; border-radius: 50%; animation: ppspin 0.8s linear infinite; margin-bottom: 16px;"></div>
+        <h2 style="font-size: 16px; font-weight: 800; margin: 0 0 6px 0; letter-spacing: -0.2px;">پاکستان پوسٹ — روزانہ رپورٹنگ پورٹل</h2>
+        <p style="font-size: 13px; font-weight: 600; margin: 0; color: #334155;">Pakistan Post • Daily Delivery Reporting System</p>
+        <p style="font-size: 11px; margin: 6px 0 0 0; color: #64748B;">Connecting to Central Cloud Database...</p>
+        <div id="early-error-notice" style="display: none; margin-top: 14px; background: #fee2e2; color: #991b1b; padding: 8px 12px; border-radius: 6px; font-size: 11px; max-width: 400px; font-family: monospace;"></div>
+        <button id="early-retry-btn" onclick="try{localStorage.clear();sessionStorage.clear();}catch(e){}window.location.reload();" style="display: none; margin-top: 14px; padding: 10px 20px; background-color: #00401A; color: #ffffff; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          کیچ صاف کر کے دوبارہ لوڈ کریں (Reset & Reload)
+        </button>
+        <style>@keyframes ppspin { to { transform: rotate(360deg); } }</style>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' })
-            .then((registration) => {
-              setInterval(() => {
-                try {
-                  registration.update();
-                } catch (e) {}
-              }, 60 * 1000);
-
-              document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'visible') {
-                  try {
-                    registration.update();
-                  } catch (e) {}
-                }
-              });
-
-              registration.addEventListener('updatefound', () => {
-                const newWorker = registration.installing;
-                if (newWorker) {
-                  newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      newWorker.postMessage({ type: 'SKIP_WAITING' });
-                    }
-                  });
-                }
-              });
-            })
-            .catch((err) => {
-              console.warn('ServiceWorker registration note:', err);
-            });
-
-          let refreshing = false;
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!refreshing) {
-              refreshing = true;
-              window.location.reload();
-            }
-          });
-        });
-      }
-    </script>
   </body>
 </html>
-

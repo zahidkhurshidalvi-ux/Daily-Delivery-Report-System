@@ -1,8 +1,13 @@
-import * as XLSX from 'xlsx';
 import { DailyReport, PostOffice } from '../types';
 import { formatDatePK, summarizeReports, getDayOfWeek, isSunday, isHoliday, getHolidayReason } from './calculations';
 
-export function exportDailyReportsToExcel(reports: DailyReport[], filename: string = 'Pakistan_Post_Daily_Reports') {
+async function getXLSX() {
+  const mod = await import('xlsx');
+  return mod.default || mod;
+}
+
+export async function exportDailyReportsToExcel(reports: DailyReport[], filename: string = 'Pakistan_Post_Daily_Reports') {
+  const XLSX = await getXLSX();
   const totals = summarizeReports(reports);
   const grandDeliveryRate =
     totals.totalReceived > 0
@@ -30,6 +35,7 @@ export function exportDailyReportsToExcel(reports: DailyReport[], filename: stri
       'Date': formatDatePK(r.date),
       'Day': dayName,
       'Office Name': r.officeName,
+      'Postman': r.postmanName || 'General',
       'Last Balance': r.lastBalance,
       'Articles Received': r.receivedToday,
       'Delivered': r.delivered,
@@ -38,6 +44,8 @@ export function exportDailyReportsToExcel(reports: DailyReport[], filename: stri
       'Missent': r.missent,
       'Deposit': r.deposit,
       'Closing Balance': r.closingBalance,
+      'EMTTS Updated': r.emttsUpdated || 0,
+      'EMTTS Pending': r.emttsNotUpdated || 0,
       'Remarks': displayRemarks,
       'Submitted At': r.submittedAt || '-',
     };
@@ -49,6 +57,7 @@ export function exportDailyReportsToExcel(reports: DailyReport[], filename: stri
     'Date': 'GRAND TOTAL',
     'Day': '-',
     'Office Name': `Total Records: ${reports.length}`,
+    'Postman': '-',
     'Last Balance': totals.totalLastBalance,
     'Articles Received': totals.totalReceived,
     'Delivered': totals.totalDelivered,
@@ -57,6 +66,8 @@ export function exportDailyReportsToExcel(reports: DailyReport[], filename: stri
     'Missent': totals.totalMissent,
     'Deposit': totals.totalDeposit,
     'Closing Balance': totals.totalClosingBalance,
+    'EMTTS Updated': reports.reduce((s, r) => s + (r.emttsUpdated || 0), 0),
+    'EMTTS Pending': reports.reduce((s, r) => s + (r.emttsNotUpdated || 0), 0),
     'Remarks': 'SYSTEM CONSOLIDATED SUMMARY',
     'Submitted At': new Date().toLocaleString(),
   });
@@ -71,7 +82,8 @@ export function exportDailyReportsToExcel(reports: DailyReport[], filename: stri
 /**
  * Exports all dates historical reports to an Excel workbook with complete metadata and date sorting.
  */
-export function exportAllDatesReportsToExcel(reports: DailyReport[], filename: string = 'Pakistan_Post_All_Dates_Reports') {
+export async function exportAllDatesReportsToExcel(reports: DailyReport[], filename: string = 'Pakistan_Post_All_Dates_Reports') {
+  const XLSX = await getXLSX();
   // Sort by date ascending, then office name
   const sortedReports = [...reports].sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
@@ -149,7 +161,7 @@ export function exportAllDatesReportsToExcel(reports: DailyReport[], filename: s
   XLSX.writeFile(workbook, `${filename}.xlsx`);
 }
 
-export function exportPendingOfficesToExcel(
+export async function exportPendingOfficesToExcel(
   pendingList: {
     office: PostOffice;
     lastReportDate?: string;
@@ -157,6 +169,7 @@ export function exportPendingOfficesToExcel(
   }[],
   selectedDate?: string
 ) {
+  const XLSX = await getXLSX();
   let totalMissingCount = 0;
 
   const data = pendingList.map((item, idx) => {

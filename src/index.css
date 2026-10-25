@@ -49,8 +49,8 @@
   .bg-white,
   .bg-gray-50,
   .bg-emerald-50,
-  .bg-[#00401A],
-  .bg-[#006633] {
+  [class*="bg-[#00401A]"],
+  [class*="bg-[#006633]"] {
     background-color: transparent !important;
     color: #000000 !important;
     box-shadow: none !important;
@@ -99,7 +99,7 @@
   .text-gray-800,
   .text-gray-700,
   .text-gray-600,
-  .text-[#006633],
+  [class*="text-[#006633]"],
   .text-emerald-700,
   .text-emerald-800,
   .text-red-600,

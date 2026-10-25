@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { PostOffice } from '../types';
+import { PostOffice, Postman } from '../types';
 import { cleanAndFilterPostOffices, isInvalidPostOfficeName } from '../utils/calculations';
 import {
   Building,
@@ -15,6 +15,10 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Check,
+  UserCheck,
+  Users,
+  X,
+  Save,
 } from 'lucide-react';
 
 interface PostOfficesManagerProps {
@@ -40,6 +44,14 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
   const [editingOffice, setEditingOffice] = useState<PostOffice | null>(null);
   const [deletingOffice, setDeletingOffice] = useState<PostOffice | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Postmen Management State
+  const [managingPostmenOffice, setManagingPostmenOffice] = useState<PostOffice | null>(null);
+  const [editingPostman, setEditingPostman] = useState<Postman | null>(null);
+  const [pmName, setPmName] = useState('');
+  const [pmBeat, setPmBeat] = useState('');
+  const [pmMobile, setPmMobile] = useState('');
+  const [pmStatus, setPmStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
 
   // Bulk Import State
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -98,10 +110,112 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
       mobileNumber: mobileNumber.trim() || '03000000000',
       status: editingOffice ? editingOffice.status : 'ACTIVE',
       initialBalance: Number(initialBalance) || 0,
+      postmen: editingOffice?.postmen || [],
     };
 
     onSaveOffice(officeToSave);
     setIsModalOpen(false);
+  };
+
+  // Open Postmen Modal for a specific office
+  const handleOpenPostmenManager = (po: PostOffice) => {
+    // Refresh office from current postOffices list
+    const current = postOffices.find((o) => o.id === po.id) || po;
+    setManagingPostmenOffice(current);
+    setEditingPostman(null);
+    setPmName('');
+    setPmBeat('');
+    setPmMobile('');
+    setPmStatus('ACTIVE');
+  };
+
+  const handleStartEditPostman = (pm: Postman) => {
+    setEditingPostman(pm);
+    setPmName(pm.name);
+    setPmBeat(pm.beatNo || '');
+    setPmMobile(pm.mobileNumber || '');
+    setPmStatus(pm.status || 'ACTIVE');
+  };
+
+  const handleCancelEditPostman = () => {
+    setEditingPostman(null);
+    setPmName('');
+    setPmBeat('');
+    setPmMobile('');
+    setPmStatus('ACTIVE');
+  };
+
+  const handleSavePostman = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!managingPostmenOffice) return;
+    const cleanPmName = pmName.trim();
+    if (!cleanPmName) return;
+
+    const currentPostmen = managingPostmenOffice.postmen || [];
+    let updatedPostmen: Postman[];
+
+    if (editingPostman) {
+      updatedPostmen = currentPostmen.map((p) =>
+        p.id === editingPostman.id
+          ? {
+              ...p,
+              name: cleanPmName,
+              beatNo: pmBeat.trim() || undefined,
+              mobileNumber: pmMobile.trim() || undefined,
+              status: pmStatus,
+            }
+          : p
+      );
+    } else {
+      const newPostman: Postman = {
+        id: `pm-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: cleanPmName,
+        beatNo: pmBeat.trim() || undefined,
+        mobileNumber: pmMobile.trim() || undefined,
+        status: pmStatus,
+      };
+      updatedPostmen = [...currentPostmen, newPostman];
+    }
+
+    const updatedOffice: PostOffice = {
+      ...managingPostmenOffice,
+      postmen: updatedPostmen,
+    };
+
+    onSaveOffice(updatedOffice);
+    setManagingPostmenOffice(updatedOffice);
+    handleCancelEditPostman();
+  };
+
+  const handleDeletePostman = (pmId: string) => {
+    if (!managingPostmenOffice) return;
+    const currentPostmen = managingPostmenOffice.postmen || [];
+    const target = currentPostmen.find((p) => p.id === pmId);
+    if (!target) return;
+
+    if (confirm(`Are you sure you want to delete postman "${target.name}"?`)) {
+      const updatedPostmen = currentPostmen.filter((p) => p.id !== pmId);
+      const updatedOffice: PostOffice = {
+        ...managingPostmenOffice,
+        postmen: updatedPostmen,
+      };
+      onSaveOffice(updatedOffice);
+      setManagingPostmenOffice(updatedOffice);
+    }
+  };
+
+  const handleTogglePostmanStatus = (pmId: string) => {
+    if (!managingPostmenOffice) return;
+    const currentPostmen = managingPostmenOffice.postmen || [];
+    const updatedPostmen = currentPostmen.map((p) =>
+      p.id === pmId ? { ...p, status: (p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE') as 'ACTIVE' | 'INACTIVE' } : p
+    );
+    const updatedOffice: PostOffice = {
+      ...managingPostmenOffice,
+      postmen: updatedPostmen,
+    };
+    onSaveOffice(updatedOffice);
+    setManagingPostmenOffice(updatedOffice);
   };
 
   // Process and parse bulk office text
@@ -323,47 +437,65 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
                   <th className="p-2.5">Post Office Name</th>
                   <th className="p-2.5">Postmaster / Incharge</th>
                   <th className="p-2.5">Mobile Number (WhatsApp)</th>
+                  <th className="p-2.5 text-center">Postmen (ڈاکیا)</th>
                   <th className="p-2.5 text-center">Status</th>
                   <th className="p-2.5 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
-                {filteredOffices.map((po, index) => (
-                  <tr key={po.id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="p-2.5 text-gray-400 font-mono text-[11px]">{index + 1}</td>
-                    <td className="p-2.5 font-bold text-gray-900">{po.name}</td>
-                    <td className="p-2.5 text-gray-700">{po.postmasterName}</td>
-                    <td className="p-2.5 text-[#006633] font-mono font-bold">{po.mobileNumber}</td>
-                    <td className="p-2.5 text-center">
-                      <button
-                        onClick={() => onToggleStatus(po.id)}
-                        className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase border transition-all ${
-                          po.status === 'ACTIVE'
-                            ? 'bg-green-50 text-green-800 border-green-200'
-                            : 'bg-red-50 text-red-800 border-red-200'
-                        }`}
-                      >
-                        {po.status}
-                      </button>
-                    </td>
-                    <td className="p-2.5 text-center space-x-1.5">
-                      <button
-                        onClick={() => handleOpenEdit(po)}
-                        className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md border border-gray-200 transition-colors"
-                        title="Edit Office Details"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeletingOffice(po)}
-                        className="p-1.5 bg-gray-100 hover:bg-red-100 text-red-600 rounded-md border border-gray-200 transition-colors"
-                        title="Delete Post Office"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredOffices.map((po, index) => {
+                  const pmCount = po.postmen?.length || 0;
+                  return (
+                    <tr key={po.id} className="hover:bg-gray-50/80 transition-colors">
+                      <td className="p-2.5 text-gray-400 font-mono text-[11px]">{index + 1}</td>
+                      <td className="p-2.5 font-bold text-gray-900">{po.name}</td>
+                      <td className="p-2.5 text-gray-700">{po.postmasterName}</td>
+                      <td className="p-2.5 text-[#006633] font-mono font-bold">{po.mobileNumber}</td>
+                      <td className="p-2.5 text-center">
+                        <button
+                          onClick={() => handleOpenPostmenManager(po)}
+                          className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer border ${
+                            pmCount > 0
+                              ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                              : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-200'
+                          }`}
+                          title="Manage Postmen assigned to this office"
+                        >
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span>{pmCount} Postmen</span>
+                        </button>
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <button
+                          onClick={() => onToggleStatus(po.id)}
+                          className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase border transition-all cursor-pointer ${
+                            po.status === 'ACTIVE'
+                              ? 'bg-green-50 text-green-800 border-green-200'
+                              : 'bg-red-50 text-red-800 border-red-200'
+                          }`}
+                        >
+                          {po.status}
+                        </button>
+                      </td>
+                      <td className="p-2.5 text-center space-x-1.5">
+                        <button
+                          onClick={() => handleOpenEdit(po)}
+                          className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md border border-gray-200 transition-colors cursor-pointer"
+                          title="Edit Office Details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeletingOffice(po)}
+                          className="p-1.5 bg-gray-100 hover:bg-red-100 text-red-600 rounded-md border border-gray-200 transition-colors cursor-pointer"
+                          title="Delete Post Office"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -665,6 +797,205 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Postmen Management Modal */}
+      {managingPostmenOffice && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in duration-200">
+            {/* Modal Header */}
+            <div className="bg-[#00401A] text-white p-4 flex items-center justify-between border-b border-[#005522]">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <UserCheck className="w-5 h-5 text-yellow-400" />
+                  <h3 className="text-base font-extrabold tracking-tight">
+                    Postmen Directory — {managingPostmenOffice.name}
+                  </h3>
+                </div>
+                <p className="text-[11px] text-emerald-200 mt-0.5">
+                  (اس پوسٹ آفس کے ڈاکیے / پوسٹ مین شامل کریں، ایڈٹ کریں یا ان کا نام و بیٹ نمبر تبدیل کریں)
+                </p>
+              </div>
+              <button
+                onClick={() => setManagingPostmenOffice(null)}
+                className="text-white/80 hover:text-white p-1 rounded-md"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5 text-xs max-h-[80vh] overflow-y-auto">
+              {/* Add / Edit Postman Form */}
+              <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-4">
+                <h4 className="font-extrabold text-gray-900 mb-2 flex items-center space-x-1.5 text-xs">
+                  <Users className="w-4 h-4 text-[#006633]" />
+                  <span>
+                    {editingPostman ? `Edit Postman: ${editingPostman.name}` : 'Add New Postman (نیا پوسٹ مین شامل کریں)'}
+                  </span>
+                </h4>
+
+                <form onSubmit={handleSavePostman} className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                  <div className="sm:col-span-4">
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Postman Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Muhammad Akram"
+                      value={pmName}
+                      onChange={(e) => setPmName(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-md p-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#006633]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Beat / Area No.
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Beat 1 (City)"
+                      value={pmBeat}
+                      onChange={(e) => setPmBeat(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-md p-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#006633]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Mobile Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="03001234567"
+                      value={pmMobile}
+                      onChange={(e) => setPmMobile(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-md p-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#006633]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 flex items-center space-x-1.5">
+                    <button
+                      type="submit"
+                      className="w-full bg-[#006633] hover:bg-[#004d26] text-white font-bold py-2 px-2.5 rounded-md shadow-xs flex items-center justify-center space-x-1 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{editingPostman ? 'Update' : 'Add'}</span>
+                    </button>
+                    {editingPostman && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEditPostman}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-2 rounded-md"
+                        title="Cancel editing"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+
+              {/* Registered Postmen Table */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-gray-800 text-xs">
+                    Registered Postmen ({managingPostmenOffice.postmen?.length || 0})
+                  </h4>
+                  <span className="text-[11px] text-gray-500">
+                    Changes are automatically saved to Central Cloud Firestore
+                  </span>
+                </div>
+
+                {!managingPostmenOffice.postmen || managingPostmenOffice.postmen.length === 0 ? (
+                  <div className="p-8 text-center bg-gray-50 rounded-lg border border-gray-200 text-gray-500">
+                    <UserCheck className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                    <p className="font-bold text-xs">No Postmen Added Yet</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      Use the form above to add postmen for {managingPostmenOffice.name}.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-[10px] border-b border-gray-200">
+                        <tr>
+                          <th className="p-2.5 w-10 text-center">#</th>
+                          <th className="p-2.5">Postman Name</th>
+                          <th className="p-2.5">Beat / Area</th>
+                          <th className="p-2.5">Mobile</th>
+                          <th className="p-2.5 text-center">Status</th>
+                          <th className="p-2.5 text-center w-24">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 font-medium text-gray-800">
+                        {managingPostmenOffice.postmen.map((pm, idx) => (
+                          <tr key={pm.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="p-2.5 text-center text-gray-400 font-mono text-[11px]">
+                              {idx + 1}
+                            </td>
+                            <td className="p-2.5 font-extrabold text-gray-900">
+                              {pm.name}
+                            </td>
+                            <td className="p-2.5 text-gray-600">
+                              {pm.beatNo || '—'}
+                            </td>
+                            <td className="p-2.5 font-mono text-[#006633] font-semibold">
+                              {pm.mobileNumber || '—'}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePostmanStatus(pm.id)}
+                                className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase cursor-pointer border ${
+                                  pm.status === 'ACTIVE'
+                                    ? 'bg-green-50 text-green-800 border-green-200'
+                                    : 'bg-red-50 text-red-800 border-red-200'
+                                }`}
+                              >
+                                {pm.status || 'ACTIVE'}
+                              </button>
+                            </td>
+                            <td className="p-2.5 text-center space-x-1.5">
+                              <button
+                                onClick={() => handleStartEditPostman(pm)}
+                                className="p-1.5 bg-gray-100 hover:bg-amber-100 text-amber-800 rounded border border-gray-200 transition-colors cursor-pointer"
+                                title="Edit Postman details"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeletePostman(pm.id)}
+                                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded border border-red-200 transition-colors cursor-pointer"
+                                title="Delete Postman"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex items-center justify-between text-xs">
+              <span className="text-gray-500 font-medium">
+                Postmen will appear in the Daily Report form for selection
+              </span>
+              <button
+                type="button"
+                onClick={() => setManagingPostmenOffice(null)}
+                className="px-4 py-2 bg-[#006633] hover:bg-[#004d26] text-white font-bold rounded-lg shadow-xs cursor-pointer"
+              >
+                Close & Done
+              </button>
+            </div>
           </div>
         </div>
       )}

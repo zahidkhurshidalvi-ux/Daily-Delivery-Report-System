@@ -50,8 +50,8 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
   const totals = summarizeReports(dateReports);
 
   // Single Date Actions
-  const handleDownloadPDF = () => {
-    const doc = generateDailyReportPDF(dateReports, selectedDate, divisionName);
+  const handleDownloadPDF = async () => {
+    const doc = await generateDailyReportPDF(dateReports, selectedDate, divisionName);
     doc.save(`Pakistan_Post_Daily_Report_${selectedDate}.pdf`);
   };
 

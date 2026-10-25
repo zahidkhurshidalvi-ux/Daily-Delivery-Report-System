@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, DailyReport, PostOffice, WhatsAppConfig, TriggerConfig, SystemLog } from './types';
+import { User, DailyReport, PostOffice, WhatsAppConfig, TriggerConfig, SystemLog, ArticleCategoryConfig } from './types';
 import {
   INITIAL_POST_OFFICES,
   INITIAL_USERS,
   INITIAL_REPORTS,
   INITIAL_WHATSAPP_CONFIG,
   INITIAL_TRIGGER_CONFIG,
+  DEFAULT_ARTICLE_CATEGORIES,
 } from './data/initialData';
 import {
   cleanAndFilterPostOffices,
@@ -17,6 +18,7 @@ import {
   normalizeDateToIso,
   SYSTEM_LAUNCH_DATE,
 } from './utils/calculations';
+import { safeStorage } from './utils/storage';
 import {
   subscribeToPostOffices,
   subscribeToDailyReports,
@@ -29,22 +31,27 @@ import {
   saveAppConfigToCloud,
   subscribeToAppConfig,
   subscribeToHolidays,
+  subscribeToArticleCategories,
+  saveArticleCategoriesToCloud,
 } from './services/cloudDatabase';
 import { Header } from './components/Header';
 import { Sidebar, NavTab } from './components/Sidebar';
-import { Dashboard } from './components/Dashboard';
 import { DailyReportForm } from './components/DailyReportForm';
-import { ReportsList } from './components/ReportsList';
-import { PostOfficesManager } from './components/PostOfficesManager';
-import { PendingReports } from './components/PendingReports';
-import { HolidayManager } from './components/HolidayManager';
-import { PdfExportView } from './components/PdfExportView';
-import { WhatsAppAndTriggers } from './components/WhatsAppAndTriggers';
-import { UserManagement } from './components/UserManagement';
-import { IssueExplanation } from './components/IssueExplanation';
-import { SystemLogs } from './components/SystemLogs';
 import { LoginModal } from './components/LoginModal';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
+
+// Code-split heavy dashboard, tables, and reporting tools to prevent mobile browser memory crashes
+const Dashboard = React.lazy(() => import('./components/Dashboard').then((m) => ({ default: m.Dashboard })));
+const ReportsList = React.lazy(() => import('./components/ReportsList').then((m) => ({ default: m.ReportsList })));
+const PostOfficesManager = React.lazy(() => import('./components/PostOfficesManager').then((m) => ({ default: m.PostOfficesManager })));
+const ReportFieldsManager = React.lazy(() => import('./components/ReportFieldsManager').then((m) => ({ default: m.ReportFieldsManager })));
+const PendingReports = React.lazy(() => import('./components/PendingReports').then((m) => ({ default: m.PendingReports })));
+const HolidayManager = React.lazy(() => import('./components/HolidayManager').then((m) => ({ default: m.HolidayManager })));
+const PdfExportView = React.lazy(() => import('./components/PdfExportView').then((m) => ({ default: m.PdfExportView })));
+const WhatsAppAndTriggers = React.lazy(() => import('./components/WhatsAppAndTriggers').then((m) => ({ default: m.WhatsAppAndTriggers })));
+const UserManagement = React.lazy(() => import('./components/UserManagement').then((m) => ({ default: m.UserManagement })));
+const IssueExplanation = React.lazy(() => import('./components/IssueExplanation').then((m) => ({ default: m.IssueExplanation })));
+const SystemLogs = React.lazy(() => import('./components/SystemLogs').then((m) => ({ default: m.SystemLogs })));
 
 // Helper function to merge two post office lists preserving contact numbers and mobile numbers
 function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[]): PostOffice[] {
@@ -86,18 +93,26 @@ function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[
 export default function App() {
   const today = getTodayDateString();
 
-  // Primary State Persistence
+  // Primary State Persistence with robust fail-safe error handling
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('pakpost_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = safeStorage.getItem('pakpost_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
 
   const [postOffices, setPostOffices] = useState<PostOffice[]>(() => {
-    const saved = localStorage.getItem('pakpost_offices');
-    const rawList: PostOffice[] = saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
-    return cleanAndFilterPostOffices(rawList);
+    try {
+      const saved = safeStorage.getItem('pakpost_offices');
+      const rawList: PostOffice[] = saved ? JSON.parse(saved) : INITIAL_POST_OFFICES;
+      return cleanAndFilterPostOffices(rawList);
+    } catch {
+      return cleanAndFilterPostOffices(INITIAL_POST_OFFICES);
+    }
   });
 
   const postOfficesRef = useRef<PostOffice[]>(postOffices);
@@ -106,25 +121,56 @@ export default function App() {
   }, [postOffices]);
 
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('pakpost_users');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
+    try {
+      const saved = safeStorage.getItem('pakpost_users');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
+    } catch {
+      return INITIAL_USERS;
+    }
   });
 
   const [reports, setReports] = useState<DailyReport[]>(() => {
-    const saved = localStorage.getItem('pakpost_reports');
-    const rawList: DailyReport[] = saved ? JSON.parse(saved) : INITIAL_REPORTS;
-    return cleanAndFilterReports(rawList);
+    try {
+      const saved = safeStorage.getItem('pakpost_reports');
+      const rawList: DailyReport[] = saved ? JSON.parse(saved) : INITIAL_REPORTS;
+      return cleanAndFilterReports(rawList);
+    } catch {
+      return cleanAndFilterReports(INITIAL_REPORTS);
+    }
   });
 
   const [whatsAppConfig, setWhatsAppConfig] = useState<WhatsAppConfig>(() => {
-    const saved = localStorage.getItem('pakpost_whatsapp');
-    return saved ? JSON.parse(saved) : INITIAL_WHATSAPP_CONFIG;
+    try {
+      const saved = safeStorage.getItem('pakpost_whatsapp');
+      return saved ? JSON.parse(saved) : INITIAL_WHATSAPP_CONFIG;
+    } catch {
+      return INITIAL_WHATSAPP_CONFIG;
+    }
   });
 
   const [triggerConfig, setTriggerConfig] = useState<TriggerConfig>(() => {
-    const saved = localStorage.getItem('pakpost_triggers');
-    return saved ? JSON.parse(saved) : INITIAL_TRIGGER_CONFIG;
+    try {
+      const saved = safeStorage.getItem('pakpost_triggers');
+      return saved ? JSON.parse(saved) : INITIAL_TRIGGER_CONFIG;
+    } catch {
+      return INITIAL_TRIGGER_CONFIG;
+    }
   });
+
+  const [categories, setCategories] = useState<ArticleCategoryConfig[]>(() => {
+    try {
+      const saved = safeStorage.getItem('pakpost_categories');
+      return saved ? JSON.parse(saved) : DEFAULT_ARTICLE_CATEGORIES;
+    } catch {
+      return DEFAULT_ARTICLE_CATEGORIES;
+    }
+  });
+
+  const handleSaveCategories = async (newCategories: ArticleCategoryConfig[]) => {
+    setCategories(newCategories);
+    safeStorage.setItem('pakpost_categories', JSON.stringify(newCategories));
+    await saveArticleCategoriesToCloud(newCategories);
+  };
 
   const [logs, setLogs] = useState<SystemLog[]>([
     {
@@ -148,8 +194,12 @@ export default function App() {
 
   // Auto-Refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem('pakpost_auto_refresh');
-    return saved ? JSON.parse(saved) : true;
+    try {
+      const saved = safeStorage.getItem('pakpost_auto_refresh');
+      return saved ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
   });
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(new Date());
 
@@ -214,11 +264,19 @@ export default function App() {
       setLastRefreshedAt(new Date());
     });
 
+    const unsubCategories = subscribeToArticleCategories((cloudCats) => {
+      if (cloudCats && cloudCats.length > 0) {
+        setCategories(cloudCats);
+        safeStorage.setItem('pakpost_categories', JSON.stringify(cloudCats));
+      }
+    });
+
     return () => {
       unsubOffices();
       unsubReports();
       unsubConfig();
       unsubHolidays();
+      unsubCategories();
     };
   }, []);
 
@@ -235,7 +293,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('pakpost_auto_refresh', JSON.stringify(autoRefreshEnabled));
+    safeStorage.setItem('pakpost_auto_refresh', JSON.stringify(autoRefreshEnabled));
     if (!autoRefreshEnabled) return;
 
     const intervalId = setInterval(() => {
@@ -245,32 +303,32 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, [autoRefreshEnabled]);
 
-  // Sync LocalStorage for offline durability
+  // Sync safeStorage for offline durability
   useEffect(() => {
-    localStorage.setItem('pakpost_offices', JSON.stringify(postOffices));
+    safeStorage.setItem('pakpost_offices', JSON.stringify(postOffices));
   }, [postOffices]);
 
   useEffect(() => {
-    localStorage.setItem('pakpost_reports', JSON.stringify(reports));
+    safeStorage.setItem('pakpost_reports', JSON.stringify(reports));
   }, [reports]);
 
   useEffect(() => {
-    localStorage.setItem('pakpost_users', JSON.stringify(users));
+    safeStorage.setItem('pakpost_users', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('pakpost_whatsapp', JSON.stringify(whatsAppConfig));
+    safeStorage.setItem('pakpost_whatsapp', JSON.stringify(whatsAppConfig));
   }, [whatsAppConfig]);
 
   useEffect(() => {
-    localStorage.setItem('pakpost_triggers', JSON.stringify(triggerConfig));
+    safeStorage.setItem('pakpost_triggers', JSON.stringify(triggerConfig));
   }, [triggerConfig]);
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('pakpost_user', JSON.stringify(currentUser));
+      safeStorage.setItem('pakpost_user', JSON.stringify(currentUser));
     } else {
-      localStorage.removeItem('pakpost_user');
+      safeStorage.removeItem('pakpost_user');
     }
   }, [currentUser]);
 
@@ -316,6 +374,7 @@ export default function App() {
         ...reportData,
         date: reportDateIso,
         id: targetId,
+        submittedAt: existingRep?.submittedAt || editingReport?.submittedAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       const updatedReports = reports.map((r) =>
@@ -559,7 +618,15 @@ export default function App() {
 
         {/* Content Area */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl">
-          {activeTab === 'dashboard' && (
+          <React.Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center p-12 text-[#00401A]">
+                <div className="w-8 h-8 border-3 border-[#00401A] border-t-transparent rounded-full animate-spin mb-3"></div>
+                <p className="text-xs font-semibold text-slate-600">لوڈ ہو رہا ہے... (Loading view)</p>
+              </div>
+            }
+          >
+            {activeTab === 'dashboard' && (
             <Dashboard
               reports={reports}
               postOffices={postOffices}
@@ -574,8 +641,7 @@ export default function App() {
             <DailyReportForm
               postOffices={postOffices}
               reports={reports}
-              selectedDate={selectedDate}
-              setSelectedDate={setSelectedDate}
+              categories={categories}
               onSubmitReport={handleSubmitDailyReport}
               editingReport={editingReport}
               onCancelEdit={() => setEditingReport(null)}
@@ -588,6 +654,7 @@ export default function App() {
             <ReportsList
               reports={reports}
               postOffices={postOffices}
+              categories={categories}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
               currentUser={currentUser}
@@ -615,6 +682,14 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'report-fields' && (
+            <ReportFieldsManager
+              categories={categories}
+              onSaveCategories={handleSaveCategories}
+              onLogAction={logAction}
+            />
+          )}
+
           {activeTab === 'holidays' && (
             <HolidayManager
               onNavigateDate={(d) => {
@@ -634,9 +709,9 @@ export default function App() {
               onSaveOffice={handleSaveOffice}
               onDeleteOffice={handleDeleteOffice}
               onToggleStatus={handleToggleOfficeStatus}
-              onBulkImport={handleBulkImportOffices}
-              onClearAll={handleClearAllOffices}
-              onResetDefault={handleResetDefaultOffices}
+              onBulkImportOffices={handleBulkImportOffices}
+              onClearAllOffices={handleClearAllOffices}
+              onResetDefaultOffices={handleResetDefaultOffices}
             />
           )}
 
@@ -681,6 +756,7 @@ export default function App() {
           )}
 
           {activeTab === 'logs' && <SystemLogs logs={logs} />}
+          </React.Suspense>
         </main>
       </div>
     </div>

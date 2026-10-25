@@ -4,8 +4,6 @@ import {
   getFirestore,
   doc,
   getDocFromServer,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -13,21 +11,20 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore with configured Database ID and multi-tab local persistence
-let firestoreInstance: Firestore;
-try {
-  if (typeof window !== 'undefined') {
-    firestoreInstance = initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    }, firebaseConfig.firestoreDatabaseId);
-  } else {
-    firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Initialize Firestore with configured Database ID and auto-detect long polling to prevent WebChannel 10s timeouts in iframe/proxy environments
+export const db: Firestore = (() => {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalAutoDetectLongPolling: true,
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
   }
-} catch (e) {
-  firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-}
-
-export const db = firestoreInstance;
+})();
 
 export enum OperationType {
   CREATE = 'create',
@@ -54,14 +51,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Startup connection probe
+// Startup connection probe with fast graceful timeout
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, '_connection_probe', 'ping'));
+    const probePromise = getDocFromServer(doc(db, '_connection_probe', 'ping'));
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Connection probe timed out')), 2500)
+    );
+    await Promise.race([probePromise, timeoutPromise]);
     return true;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore is running in offline cache mode.');
+    if (error instanceof Error && (error.message.includes('offline') || error.message.includes('timed out'))) {
+      console.warn('Firestore connection probe note: client is operating with local cache or probe timed out.');
     }
     return false;
   }
