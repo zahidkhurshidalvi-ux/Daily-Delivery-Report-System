@@ -114,43 +114,45 @@ export const PendingReports: React.FC<PendingReportsProps> = ({
   );
   const submittedOfficeKeys = new Set(dateReports.map((r) => normOffice(r.officeName)));
 
-  const pendingList = isPreLaunchDate
-    ? []
-    : activeOffices
-        .map((office) => {
-          const officeKey = normOffice(office.name);
-          const pastReports = validReports
-            .filter((r) => normOffice(r.officeName) === officeKey)
-            .sort((a, b) => (a.date > b.date ? -1 : 1));
+  const pendingList = React.useMemo(() => {
+    if (isPreLaunchDate) return [];
 
-          const officeStartDate = getOfficeEffectiveStartDate(office, validReports);
-          const allMissingDates = getMissingDatesForOffice(office.name, isoSelected, validReports, officeStartDate);
-          const isSubmittedSelectedDate = submittedOfficeKeys.has(officeKey);
-          
-          // An office can ONLY be missing for selectedDate if selectedDate is on or after the office was added!
-          const isOfficeActiveOnSelectedDate = isoSelected >= officeStartDate;
-          const isMissingSelectedDate = !isClosedDay && !isSubmittedSelectedDate && isOfficeActiveOnSelectedDate;
+    return activeOffices
+      .map((office) => {
+        const officeKey = normOffice(office.name);
+        const pastReports = validReports
+          .filter((r) => normOffice(r.officeName) === officeKey)
+          .sort((a, b) => (a.date > b.date ? -1 : 1));
 
-          // Missing dates strictly prior to selectedDate (strictly bounded by officeStartDate)
-          const priorMissingDates = allMissingDates.filter((d) => d !== isoSelected);
+        const officeStartDate = getOfficeEffectiveStartDate(office, validReports);
+        const allMissingDates = getMissingDatesForOffice(office.name, isoSelected, validReports, officeStartDate);
+        const isSubmittedSelectedDate = submittedOfficeKeys.has(officeKey);
+        
+        // An office can ONLY be missing for selectedDate if selectedDate is on or after the office was added!
+        const isOfficeActiveOnSelectedDate = isoSelected >= officeStartDate;
+        const isMissingSelectedDate = !isClosedDay && !isSubmittedSelectedDate && isOfficeActiveOnSelectedDate;
 
-          // Full effective missing dates: if submitted on selectedDate or not active on selectedDate, selectedDate is NEVER included
-          const effectiveMissingDates = isMissingSelectedDate
-            ? Array.from(new Set([...priorMissingDates, isoSelected])).sort()
-            : priorMissingDates;
+        // Missing dates strictly prior to selectedDate (strictly bounded by officeStartDate)
+        const priorMissingDates = allMissingDates.filter((d) => d !== isoSelected);
 
-          return {
-            office,
-            lastReportDate: pastReports.length > 0 ? pastReports[0].date : undefined,
-            missingDates: effectiveMissingDates,
-            isSubmittedSelectedDate,
-            isMissingSelectedDate,
-            priorMissingDates,
-            officeStartDate,
-          };
-        })
-        .filter((item) => item.missingDates.length > 0)
-        .sort((a, b) => a.office.name.localeCompare(b.office.name, undefined, { sensitivity: 'base', numeric: true }));
+        // Full effective missing dates: if submitted on selectedDate or not active on selectedDate, selectedDate is NEVER included
+        const effectiveMissingDates = isMissingSelectedDate
+          ? Array.from(new Set([...priorMissingDates, isoSelected])).sort()
+          : priorMissingDates;
+
+        return {
+          office,
+          lastReportDate: pastReports.length > 0 ? pastReports[0].date : undefined,
+          missingDates: effectiveMissingDates,
+          isSubmittedSelectedDate,
+          isMissingSelectedDate,
+          priorMissingDates,
+          officeStartDate,
+        };
+      })
+      .filter((item) => item.missingDates.length > 0)
+      .sort((a, b) => a.office.name.localeCompare(b.office.name, undefined, { sensitivity: 'base', numeric: true }));
+  }, [isPreLaunchDate, activeOffices, validReports, isoSelected, submittedOfficeKeys, isClosedDay]);
 
   // Separate counts for each view tab
   const pendingSelectedDateCount = pendingList.filter((item) => item.isMissingSelectedDate).length;

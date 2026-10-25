@@ -43,42 +43,60 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateNewReport,
   onNavigatePending,
 }) => {
-  const activeOffices = postOffices.filter((po) => {
-    if (po.status !== 'ACTIVE') return false;
-    const start = getOfficeEffectiveStartDate(po, reports);
-    return selectedDate >= start;
-  });
-  const dateReports = reports.filter((r) => r.date === selectedDate);
-  const allDateReports = getCompleteDateReports(reports, postOffices, selectedDate);
-  const receivedCount = dateReports.length;
-  const isPreLaunch = selectedDate < SYSTEM_LAUNCH_DATE || selectedDate === '2026-07-29';
+  const [showAllRows, setShowAllRows] = useState(false);
+
   const isSun = isSunday(selectedDate);
   const isHol = isHoliday(selectedDate);
   const holidayReason = getHolidayReason(selectedDate);
   const isClosedDay = isSun || isHol;
-  const pendingCount = isPreLaunch || isClosedDay ? 0 : Math.max(0, activeOffices.length - receivedCount);
 
-  const totals = summarizeReports(dateReports);
+  const {
+    activeOffices,
+    dateReports,
+    allDateReports,
+    receivedCount,
+    pendingCount,
+    totals,
+    barChartData,
+    deliveryRate,
+  } = React.useMemo(() => {
+    const actOffices = postOffices.filter((po) => {
+      if (po.status !== 'ACTIVE') return false;
+      const start = getOfficeEffectiveStartDate(po, reports);
+      return selectedDate >= start;
+    });
+    const dReports = reports.filter((r) => r.date === selectedDate);
+    const allReports = getCompleteDateReports(reports, postOffices, selectedDate);
+    const recCount = dReports.length;
+    const isPreLaunch = selectedDate < SYSTEM_LAUNCH_DATE || selectedDate === '2026-07-29';
+    const pendCount = isPreLaunch || isClosedDay ? 0 : Math.max(0, actOffices.length - recCount);
+    const tots = summarizeReports(dReports);
 
-  // Recharts Chart Data Prepared
-  const barChartData = dateReports.slice(0, 10).map((r) => ({
-    name: r.officeName.replace(' GPO', '').replace(' Post Office', ''),
-    Received: r.receivedToday,
-    Delivered: r.delivered,
-    Returned: r.returnedToSender,
-  }));
+    const bChartData = dReports.slice(0, 10).map((r) => ({
+      name: r.officeName.replace(' GPO', '').replace(' Post Office', ''),
+      Received: r.receivedToday,
+      Delivered: r.delivered,
+      Returned: r.returnedToSender,
+    }));
 
-  const pieChartData = [
-    { name: 'Delivered', value: totals.totalDelivered, color: '#059669' },
-    { name: 'Returned to Sender', value: totals.totalReturned, color: '#dc2626' },
-    { name: 'Missent', value: totals.totalMissent, color: '#d97706' },
-    { name: 'Deposit', value: totals.totalDeposit, color: '#2563eb' },
-  ];
+    const delRate =
+      tots.totalReceived > 0
+        ? Math.round((tots.totalDelivered / (tots.totalLastBalance + tots.totalReceived)) * 100)
+        : 0;
 
-  const deliveryRate =
-    totals.totalReceived > 0
-      ? Math.round((totals.totalDelivered / (totals.totalLastBalance + totals.totalReceived)) * 100)
-      : 0;
+    return {
+      activeOffices: actOffices,
+      dateReports: dReports,
+      allDateReports: allReports,
+      receivedCount: recCount,
+      pendingCount: pendCount,
+      totals: tots,
+      barChartData: bChartData,
+      deliveryRate: delRate,
+    };
+  }, [reports, postOffices, selectedDate, isClosedDay]);
+
+  const displayedReports = showAllRows ? allDateReports : allDateReports.slice(0, 25);
 
   return (
     <div className="space-y-6">
@@ -435,7 +453,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
-                {allDateReports.map((r, idx) => {
+                {displayedReports.map((r, idx) => {
                   const isMissing = r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted');
                   return (
                     <tr key={r.id ? `${r.id}_${r.officeName}_${r.date}` : `dash-row-${r.officeName}-${idx}`} className={isMissing ? 'bg-red-50/50 hover:bg-red-50/80 transition-colors' : 'hover:bg-gray-50/80 transition-colors'}>
@@ -473,6 +491,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 })}
               </tbody>
             </table>
+            {allDateReports.length > 25 && (
+              <div className="p-2.5 text-center border-t border-gray-100 bg-gray-50/50">
+                <button
+                  type="button"
+                  onClick={() => setShowAllRows(!showAllRows)}
+                  className="text-xs font-bold text-[#00401A] bg-green-50 hover:bg-green-100 border border-green-200 px-4 py-1.5 rounded transition-colors"
+                >
+                  {showAllRows ? 'Show Fewer Offices (25)' : `Show All ${allDateReports.length} Offices`}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-8 text-center border border-dashed border-gray-200 rounded-lg text-gray-400 text-xs">

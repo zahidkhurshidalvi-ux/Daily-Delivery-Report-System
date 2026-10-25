@@ -543,31 +543,36 @@ export default function App() {
     }
   };
 
-  // Calculate pending office count for today
-  const activeOffices = postOffices.filter((po) => po.status === 'ACTIVE');
-  const todayIso = normalizeDateToIso(today) || today;
-  const todaySubmittedSet = new Set(
-    reports
-      .filter(
-        (r) =>
-          (normalizeDateToIso(r.date) || r.date) === todayIso &&
-          r.submittedBy !== 'NOT_SUBMITTED' &&
-          !r.remarks?.includes('Report not submitted')
-      )
-      .map((r) => String(r.officeName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, ''))
-  );
-  const isTodaySunday = isSunday(today);
-  const isTodayHoliday = isHoliday(today);
-  const isTodayPreLaunch = today < SYSTEM_LAUNCH_DATE || today === '2026-07-29';
-  const pendingCountToday =
-    isTodaySunday || isTodayHoliday || isTodayPreLaunch
-      ? 0
-      : activeOffices.filter(
-          (po) =>
-            !todaySubmittedSet.has(
-              String(po.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '')
-            )
-        ).length;
+  // Calculate pending office count for today with useMemo to avoid recomputing on every keystroke
+  const pendingCountToday = React.useMemo(() => {
+    const isTodaySunday = isSunday(today);
+    const isTodayHoliday = isHoliday(today);
+    const isTodayPreLaunch = today < SYSTEM_LAUNCH_DATE || today === '2026-07-29';
+    if (isTodaySunday || isTodayHoliday || isTodayPreLaunch) return 0;
+
+    const todayIso = normalizeDateToIso(today) || today;
+    const submittedSet = new Set<string>();
+    for (const r of reports) {
+      if (
+        (normalizeDateToIso(r.date) || r.date) === todayIso &&
+        r.submittedBy !== 'NOT_SUBMITTED' &&
+        !r.remarks?.includes('Report not submitted')
+      ) {
+        submittedSet.add(String(r.officeName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, ''));
+      }
+    }
+
+    let count = 0;
+    for (const po of postOffices) {
+      if (po.status === 'ACTIVE') {
+        const key = String(po.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+        if (!submittedSet.has(key)) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }, [postOffices, reports, today]);
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-slate-800 font-sans flex flex-col">

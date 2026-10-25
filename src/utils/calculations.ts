@@ -745,6 +745,9 @@ export function cleanAndFilterReports(reports: DailyReport[]): DailyReport[] {
  *   - If office already has submitted reports in `reports`, the earliest submitted report date (or SYSTEM_LAUNCH_DATE) is used.
  *   - If office has NO submitted reports at all, it is considered newly added! Defaults to today's date so past backlog is never shown.
  */
+const officeEarliestDateCache = new Map<string, string>();
+let lastReportsRefForEarliest: DailyReport[] | null = null;
+
 export function getOfficeEffectiveStartDate(
   office: PostOffice | { name: string; createdDate?: string },
   reports: DailyReport[] = []
@@ -759,28 +762,26 @@ export function getOfficeEffectiveStartDate(
   const officeNorm = (office.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
   if (!officeNorm) return SYSTEM_LAUNCH_DATE;
 
-  const validReports = cleanAndFilterReports(reports);
-  const officeReports = validReports.filter((r) => {
-    if (!r || !r.officeName || !r.date) return false;
-    const rNorm = r.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-    if (rNorm !== officeNorm) return false;
-    if (r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted')) {
-      return false;
-    }
-    return true;
-  });
-
-  if (officeReports.length > 0) {
-    const sortedDates = officeReports
-      .map((r) => normalizeDateToIso(r.date) || r.date)
-      .filter((d) => Boolean(d) && d >= SYSTEM_LAUNCH_DATE && d !== '2026-07-29')
-      .sort();
-    if (sortedDates.length > 0) {
-      return sortedDates[0];
+  // Single fast O(N) indexing when reports changes
+  if (lastReportsRefForEarliest !== reports) {
+    officeEarliestDateCache.clear();
+    lastReportsRefForEarliest = reports;
+    for (const r of reports) {
+      if (!r || !r.officeName || !r.date) continue;
+      if (r.submittedBy === 'NOT_SUBMITTED' || r.remarks?.includes('Report not submitted')) continue;
+      const rNorm = r.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      const rDate = normalizeDateToIso(r.date) || r.date;
+      if (!rDate || rDate < SYSTEM_LAUNCH_DATE || rDate === '2026-07-29') continue;
+      const prev = officeEarliestDateCache.get(rNorm);
+      if (!prev || rDate < prev) {
+        officeEarliestDateCache.set(rNorm, rDate);
+      }
     }
   }
 
-  // Newly added office without past reports -> Start from today!
+  const cached = officeEarliestDateCache.get(officeNorm);
+  if (cached) return cached;
+
   return getTodayDateString();
 }
 
@@ -809,11 +810,24 @@ export function getCompleteDateReports(
   const isSundayDate = isSunday(targetDate);
   const isHolidayDate = isHoliday(targetDate);
   const holidayReason = getHolidayReason(targetDate);
-  const dateReports = validReports.filter((r) => r.date === targetDate);
+  const dateReports = validReports.filter((r) => (normalizeDateToIso(r.date) || r.date) === targetDate);
   const submittedOfficeKeys = new Set(
     dateReports.map((r) => r.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, ''))
   );
   const activeOffices = validOffices.filter((po) => po.status === 'ACTIVE');
+
+  // Pre-index the latest past report before targetDate for all offices in one single O(N) pass
+  const latestPastReportByOffice = new Map<string, DailyReport>();
+  for (const r of validReports) {
+    const rDate = normalizeDateToIso(r.date) || r.date;
+    if (!rDate || rDate >= targetDate) continue;
+    const rNorm = r.officeName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const current = latestPastReportByOffice.get(rNorm);
+    const currDate = current ? (normalizeDateToIso(current.date) || current.date) : '';
+    if (!current || rDate > currDate) {
+      latestPastReportByOffice.set(rNorm, r);
+    }
+  }
 
   // Ensure unique active offices by name
   const seenActiveNames = new Set<string>();
@@ -834,19 +848,10 @@ export function getCompleteDateReports(
       return !submittedOfficeKeys.has(po.name.toLowerCase().trim().replace(/[^a-z0-9]/g, ''));
     })
     .map((office) => {
-      // Find previous submitted report for this office to carry forward last balance if available
-      const pastReports = validReports
-        .filter(
-          (r) =>
-            r.officeName.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-              office.name.toLowerCase().replace(/[^a-z0-9]/g, '') &&
-            r.date < targetDate
-        )
-        .sort((a, b) => (a.date > b.date ? -1 : 1));
-
+      const officeNorm = office.name.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
       let carriedBal = office.initialBalance || 0;
-      if (pastReports.length > 0) {
-        const prev = pastReports[0];
+      const prev = latestPastReportByOffice.get(officeNorm);
+      if (prev) {
         carriedBal =
           prev.deposit > 0
             ? prev.deposit
