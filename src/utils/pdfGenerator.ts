@@ -1,6 +1,16 @@
 import type { jsPDF } from 'jspdf';
 import { DailyReport, PostOffice } from '../types';
-import { formatDatePK, formatNumber, summarizeReports, isSunday, isHoliday, getHolidayReason, getDayOfWeek } from './calculations';
+import {
+  formatDatePK,
+  formatNumber,
+  summarizeReports,
+  isSunday,
+  isHoliday,
+  getHolidayReason,
+  getDayOfWeek,
+  FINAL_ARTICLE_CATEGORIES,
+  DailyPostmanArticleReportData,
+} from './calculations';
 
 async function getJsPDF(): Promise<any> {
   const mod = await import('jspdf');
@@ -1037,6 +1047,408 @@ function printHtmlDocument(html: string) {
       } catch (e) {
         console.warn('Print failed', e);
       }
+      setTimeout(() => {
+        try {
+          document.body.removeChild(iframe);
+        } catch (_) {}
+      }, 2000);
+    }, 400);
+  } else {
+    window.print();
+  }
+}
+
+/**
+ * Triggers an official A4 Landscape browser print/PDF preview for the 31-column
+ * DAILY POSTMAN ARTICLE REPORT (Office Wise & Postman Wise).
+ * Completely excludes EMTTS and Remarks columns.
+ */
+export function triggerDailyPostmanArticleReportPrint(
+  reportData: DailyPostmanArticleReportData,
+  divisionName: string = 'Gujranwala Division'
+) {
+  const isSun = isSunday(reportData.reportDate);
+  const isHol = isHoliday(reportData.reportDate);
+  const holReason = getHolidayReason(reportData.reportDate);
+
+  const grandPct =
+    reportData.grandTotals.deliveryPercentage !== null
+      ? `${reportData.grandTotals.deliveryPercentage.toFixed(1)}%`
+      : '0.0%';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Daily Postman Article Report - ${formatDatePK(reportData.reportDate)}</title>
+        <meta charset="utf-8" />
+        <style>
+          @page { size: A4 landscape; margin: 4mm 5mm; }
+          * { box-sizing: border-box; }
+          body { 
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif; 
+            margin: 0; 
+            padding: 4px;
+            color: #0f172a; 
+            font-size: 7.5px;
+            line-height: 1.15;
+            background: #fff;
+          }
+          .no-print { margin-bottom: 8px; display: flex; gap: 8px; }
+          .header { text-align: center; margin-bottom: 5px; border-bottom: 2px solid #00401A; padding-bottom: 3px; }
+          .header h1 { font-size: 13px; font-weight: 900; margin: 0; color: #00401A; letter-spacing: 1px; }
+          .header h2 { font-size: 8.5px; font-weight: 700; margin: 1px 0; color: #334155; text-transform: uppercase; }
+          .title-badge { 
+            display: inline-block; 
+            background: #00401A; 
+            color: #fff; 
+            font-weight: 800; 
+            font-size: 9px; 
+            padding: 2px 10px; 
+            border-radius: 3px; 
+            margin-top: 2px;
+            letter-spacing: 0.5px;
+          }
+          .title-sub {
+            font-size: 8px;
+            font-weight: 700;
+            color: #00401A;
+            margin-top: 1px;
+            text-transform: uppercase;
+          }
+          .meta-bar {
+            display: flex;
+            justify-content: space-between;
+            font-size: 8px;
+            font-weight: bold;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 3px;
+            margin-top: 4px;
+          }
+          .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 3px;
+            margin: 4px 0 6px 0;
+            text-align: center;
+          }
+          .stats-item {
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            padding: 2px 4px;
+            border-radius: 2px;
+          }
+          .stats-item span { display: block; font-size: 6.5px; color: #64748b; text-transform: uppercase; font-weight: 700; }
+          .stats-item strong { display: block; font-size: 9px; font-weight: 900; color: #00401A; }
+
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-size: 7px; 
+          }
+          th, td { 
+            border: 1px solid #94a3b8; 
+            padding: 2px 2.5px; 
+            vertical-align: middle;
+          }
+          th { 
+            background-color: #00401A; 
+            color: #fff;
+            font-weight: 800; 
+            text-align: center;
+            font-size: 6.5px;
+            text-transform: uppercase;
+            line-height: 1.1;
+          }
+          th.sub-rec { background-color: #005522; }
+          th.sub-del { background-color: #047857; }
+          td.num { text-align: right; font-family: monospace; font-size: 7px; }
+          td.text-center { text-align: center; }
+          .office-header-row td {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            font-weight: 800;
+            font-size: 7.5px;
+            border-top: 1.5px solid #00401A;
+            border-bottom: 1px solid #94a3b8;
+            padding: 3px 4px;
+          }
+          .office-total-row td {
+            background-color: #e2f0d9;
+            color: #00401A;
+            font-weight: 800;
+            border-top: 1px solid #00401A;
+            border-bottom: 1.5px solid #00401A;
+          }
+          .grand-total-row td {
+            background-color: #00401A;
+            color: #fff;
+            font-weight: 900;
+            font-size: 7.5px;
+            border: 1.5px solid #000;
+          }
+          .grand-total-row td.num { color: #fef08a; }
+          .status-badge {
+            display: inline-block;
+            padding: 1px 3px;
+            border-radius: 2px;
+            font-size: 6px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+          .status-submitted { background: #dcfce7; color: #166534; }
+          .status-missing { background: #fee2e2; color: #991b1b; }
+          .status-incomplete { background: #fef3c7; color: #92400e; }
+
+          .signatures { 
+            margin-top: 12px; 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 8px; 
+            font-weight: bold;
+            page-break-inside: avoid;
+          }
+          .sig-line { 
+            border-top: 1px solid #000; 
+            width: 220px; 
+            text-align: center; 
+            padding-top: 3px; 
+          }
+          @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print">
+          <button onclick="window.print()" style="background:#00401A; color:white; border:none; padding:7px 16px; font-weight:bold; cursor:pointer; border-radius:4px; font-size:11px;">
+            🖨️ Print Report (A4 Landscape)
+          </button>
+        </div>
+
+        <div class="header">
+          <h1>PAKISTAN POST</h1>
+          <h2>OFFICE OF THE DIVISIONAL SUPERINTENDENT POSTAL SERVICES ${divisionName.toUpperCase()}</h2>
+          <div>
+            <span class="title-badge">DAILY POSTMAN ARTICLE REPORT</span>
+          </div>
+          <div class="title-sub">Office Wise & Postman Wise</div>
+          <div class="meta-bar">
+            <div>DATE: <u>${formatDatePK(reportData.reportDate)}${isHol ? ` (${holReason || 'Public Holiday'})` : isSun ? ' (Sunday Holiday)' : ''}</u></div>
+            <div>TOTAL OFFICES: <u>${reportData.grandTotals.totalOffices}</u></div>
+            <div>REGISTERED POSTMEN: <u>${reportData.grandTotals.totalRegisteredPostmen}</u></div>
+            <div>SUBMISSIONS: <u>${reportData.grandTotals.submittedCount} / ${reportData.grandTotals.totalRegisteredPostmen} (${reportData.grandTotals.completionRate.toFixed(1)}%)</u></div>
+            <div>PRINTED ON: <u>${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')}</u></div>
+          </div>
+        </div>
+
+        <div class="stats-bar">
+          <div class="stats-item"><span>Offices</span><strong>${reportData.grandTotals.totalOffices}</strong></div>
+          <div class="stats-item"><span>Postmen</span><strong>${reportData.grandTotals.totalRegisteredPostmen}</strong></div>
+          <div class="stats-item"><span>Submissions</span><strong>${reportData.grandTotals.completionRate.toFixed(0)}%</strong></div>
+          <div class="stats-item"><span>Last Bal</span><strong>${formatNumber(reportData.grandTotals.lastBalance)}</strong></div>
+          <div class="stats-item"><span>Total Recv</span><strong>${formatNumber(reportData.grandTotals.receivedTotal)}</strong></div>
+          <div class="stats-item"><span>Total Deliv</span><strong>${formatNumber(reportData.grandTotals.deliveredTotal)}</strong></div>
+          <div class="stats-item"><span>Deliv %</span><strong style="color:#047857;">${grandPct}</strong></div>
+          <div class="stats-item"><span>Deposit</span><strong style="color:#2563eb;">${formatNumber(reportData.grandTotals.deposit)}</strong></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th rowspan="2" style="width:16px;">Sr</th>
+              <th rowspan="2" style="width:75px;">Office Name</th>
+              <th rowspan="2" style="width:70px;">Postman Name</th>
+              <th rowspan="2" style="width:30px;">Last Bal</th>
+              <th colspan="11" class="sub-rec">RECEIVED ARTICLES</th>
+              <th colspan="11" class="sub-del">DELIVERED ARTICLES</th>
+              <th rowspan="2" style="width:26px;">Ret. Sender</th>
+              <th rowspan="2" style="width:26px;">Mis- sent</th>
+              <th rowspan="2" style="width:30px;">Deposit / Not Del</th>
+              <th rowspan="2" style="width:28px;">Deliv %</th>
+              <th rowspan="2" style="width:48px;">Report Status</th>
+            </tr>
+            <tr>
+              <th class="sub-rec">RGL</th>
+              <th class="sub-rec">Parcel</th>
+              <th class="sub-rec">UMS</th>
+              <th class="sub-rec">Ord</th>
+              <th class="sub-rec">Exc</th>
+              <th class="sub-rec">VPP</th>
+              <th class="sub-rec">MO</th>
+              <th class="sub-rec">E-Chal</th>
+              <th class="sub-rec">COD</th>
+              <th class="sub-rec">Med</th>
+              <th class="sub-rec" style="background:#003314; font-weight:900;">Total Recv</th>
+
+              <th class="sub-del">RGL</th>
+              <th class="sub-del">Parcel</th>
+              <th class="sub-del">UMS</th>
+              <th class="sub-del">Ord</th>
+              <th class="sub-del">Exc</th>
+              <th class="sub-del">VPP</th>
+              <th class="sub-del">MO</th>
+              <th class="sub-del">E-Chal</th>
+              <th class="sub-del">COD</th>
+              <th class="sub-del">Med</th>
+              <th class="sub-del" style="background:#065f46; font-weight:900;">Total Deliv</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${reportData.officeGroups
+              .map((group) => {
+                const offHead = `
+                <tr class="office-header-row">
+                  <td colspan="31">
+                    🏢 <strong>${group.officeName}</strong>
+                    &nbsp;|&nbsp; Incharge: <em>${group.office.postmasterName || 'N/A'}</em>
+                    &nbsp;|&nbsp; Postmen Roster: <strong>${group.totalRegisteredPostmen}</strong>
+                    &nbsp;|&nbsp; Submitted: <strong>${group.submittedCount}/${group.totalRegisteredPostmen}</strong>
+                    &nbsp;(${group.completionRate.toFixed(0)}%)
+                  </td>
+                </tr>
+              `;
+
+                const postmanRowsHtml = group.postmanRows
+                  .map((row) => {
+                    const isSub = row.hasSubmission;
+                    const statusClass =
+                      row.status === 'Submitted'
+                        ? 'status-submitted'
+                        : row.status === 'Incomplete'
+                        ? 'status-incomplete'
+                        : 'status-missing';
+
+                    const pctStr =
+                      row.deliveryPercentage !== null ? `${row.deliveryPercentage.toFixed(1)}%` : '-';
+
+                    const valCell = (v: number | null | undefined) =>
+                      isSub && v !== null && v !== undefined ? formatNumber(v) : '';
+
+                    return `
+                  <tr>
+                    <td class="text-center">${row.srNo}</td>
+                    <td><strong>${row.officeName}</strong></td>
+                    <td>${row.postmanName}</td>
+                    <td class="num">${valCell(row.lastBalance)}</td>
+
+                    <!-- Received 10 categories -->
+                    ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${valCell(row.received[cat.key])}</td>`).join('')}
+                    <td class="num" style="font-weight:bold; background:#f0fdf4;">${valCell(row.receivedTotal)}</td>
+
+                    <!-- Delivered 10 categories -->
+                    ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${valCell(row.delivered[cat.key])}</td>`).join('')}
+                    <td class="num" style="font-weight:bold; background:#ecfdf5;">${valCell(row.deliveredTotal)}</td>
+
+                    <td class="num" style="color:#b91c1c;">${valCell(row.returnedToSender)}</td>
+                    <td class="num" style="color:#d97706;">${valCell(row.missent)}</td>
+                    <td class="num" style="color:#2563eb;">${valCell(row.deposit)}</td>
+                    <td class="num" style="font-weight:bold; color:#006633;">${isSub ? pctStr : ''}</td>
+                    <td class="text-center"><span class="status-badge ${statusClass}">${row.status}</span></td>
+                  </tr>
+                `;
+                  })
+                  .join('');
+
+                const offPctStr =
+                  group.totals.deliveryPercentage !== null
+                    ? `${group.totals.deliveryPercentage.toFixed(1)}%`
+                    : '0.0%';
+
+                const offTotalRow = `
+                <tr class="office-total-row">
+                  <td class="text-center">Σ</td>
+                  <td colspan="2"><strong>${group.officeName} TOTAL</strong></td>
+                  <td class="num">${formatNumber(group.totals.lastBalance)}</td>
+
+                  ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${formatNumber(group.totals.receivedByCategory[cat.key] || 0)}</td>`).join('')}
+                  <td class="num" style="font-weight:900;">${formatNumber(group.totals.receivedTotal)}</td>
+
+                  ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${formatNumber(group.totals.deliveredByCategory[cat.key] || 0)}</td>`).join('')}
+                  <td class="num" style="font-weight:900;">${formatNumber(group.totals.deliveredTotal)}</td>
+
+                  <td class="num">${formatNumber(group.totals.returnedToSender)}</td>
+                  <td class="num">${formatNumber(group.totals.missent)}</td>
+                  <td class="num">${formatNumber(group.totals.deposit)}</td>
+                  <td class="num" style="font-weight:900;">${offPctStr}</td>
+                  <td class="text-center" style="font-size:6.5px;">${group.submittedCount}/${group.totalRegisteredPostmen} Submitted</td>
+                </tr>
+              `;
+
+                return offHead + postmanRowsHtml + offTotalRow;
+              })
+              .join('')}
+
+            <!-- GRAND TOTAL ROW -->
+            <tr class="grand-total-row">
+              <td class="text-center">★</td>
+              <td colspan="2">GRAND TOTAL (${reportData.grandTotals.totalOffices} OFFICES)</td>
+              <td class="num">${formatNumber(reportData.grandTotals.lastBalance)}</td>
+
+              ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${formatNumber(reportData.grandTotals.receivedByCategory[cat.key] || 0)}</td>`).join('')}
+              <td class="num" style="font-weight:900;">${formatNumber(reportData.grandTotals.receivedTotal)}</td>
+
+              ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${formatNumber(reportData.grandTotals.deliveredByCategory[cat.key] || 0)}</td>`).join('')}
+              <td class="num" style="font-weight:900;">${formatNumber(reportData.grandTotals.deliveredTotal)}</td>
+
+              <td class="num">${formatNumber(reportData.grandTotals.returnedToSender)}</td>
+              <td class="num">${formatNumber(reportData.grandTotals.missent)}</td>
+              <td class="num">${formatNumber(reportData.grandTotals.deposit)}</td>
+              <td class="num" style="font-weight:900;">${grandPct}</td>
+              <td class="text-center">CONSOLIDATED</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="signatures">
+          <div class="sig-line">
+            Prepared By: In-Charge / Data Operator<br />
+            <small>${divisionName}</small>
+          </div>
+          <div class="sig-line">
+            <strong>Divisional Superintendent Postal Services</strong><br />
+            <span>${divisionName}</span>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  // First try direct window.open
+  try {
+    const printWindow = window.open('', '_blank');
+    if (printWindow && !printWindow.closed) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 400);
+      return;
+    }
+  } catch (e) {
+    console.warn('Popup blocked, using hidden iframe printing mechanism:', e);
+  }
+
+  // Fallback: dynamic hidden iframe
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (doc) {
+    doc.open();
+    doc.write(html);
+    doc.close();
+    iframe.contentWindow?.focus();
+    setTimeout(() => {
+      iframe.contentWindow?.print();
       setTimeout(() => {
         try {
           document.body.removeChild(iframe);

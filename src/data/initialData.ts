@@ -13,14 +13,14 @@ const today = getTodayDateString();
 // Clean empty initial reports by default (no dummy records deployed to GitHub/production)
 export const INITIAL_REPORTS: DailyReport[] = [];
 
-// Standard Pakistan Post Article Categories specified by user
+// Standard Pakistan Post Article Categories specified by user (10 categories in exact order)
 export const DEFAULT_ARTICLE_CATEGORIES: ArticleCategoryConfig[] = [
   {
     id: 'cat-rgl',
     key: 'rgl',
-    label: 'RGL (Intl/dom/ins)',
+    label: 'RGL',
     code: 'RGL',
-    description: 'Registered Letter (International / Domestic / Insured)',
+    description: 'Registered Letter (Combined)',
     requiresEmtts: true,
     enabled: true,
     sortOrder: 1,
@@ -29,9 +29,9 @@ export const DEFAULT_ARTICLE_CATEGORIES: ArticleCategoryConfig[] = [
   {
     id: 'cat-parcel',
     key: 'parcel',
-    label: 'Parcel (Intl/dom/ins)',
+    label: 'Parcel',
     code: 'PARCEL',
-    description: 'Parcel Post (International / Domestic / Insured)',
+    description: 'Parcel Post (Combined)',
     requiresEmtts: true,
     enabled: true,
     sortOrder: 2,
@@ -83,8 +83,8 @@ export const DEFAULT_ARTICLE_CATEGORIES: ArticleCategoryConfig[] = [
   },
   {
     id: 'cat-mo',
-    key: 'money_order',
-    label: 'Money Order',
+    key: 'mo',
+    label: 'MO',
     code: 'MO',
     description: 'Electronic Money Order (eMO) & General MO',
     requiresEmtts: true,
@@ -112,6 +112,17 @@ export const DEFAULT_ARTICLE_CATEGORIES: ArticleCategoryConfig[] = [
     requiresEmtts: true,
     enabled: true,
     sortOrder: 9,
+    isSystemDefault: true,
+  },
+  {
+    id: 'cat-medical',
+    key: 'medical',
+    label: 'Medical',
+    code: 'MED',
+    description: 'Medical Store & Hospital Articles',
+    requiresEmtts: true,
+    enabled: true,
+    sortOrder: 10,
     isSystemDefault: true,
   },
 ];

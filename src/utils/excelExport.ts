@@ -1,12 +1,151 @@
 import { DailyReport, PostOffice } from '../types';
-import { formatDatePK, summarizeReports, getDayOfWeek, isSunday, isHoliday, getHolidayReason } from './calculations';
+import {
+  formatDatePK,
+  summarizeReports,
+  getDayOfWeek,
+  isSunday,
+  isHoliday,
+  getHolidayReason,
+  FINAL_ARTICLE_CATEGORIES,
+  DailyPostmanArticleReportData,
+  buildDailyPostmanArticleReport,
+} from './calculations';
 
 async function getXLSX() {
   const mod = await import('xlsx');
   return mod.default || mod;
 }
 
-export async function exportDailyReportsToExcel(reports: DailyReport[], filename: string = 'Pakistan_Post_Daily_Reports') {
+/**
+ * Exports the 31-column Office-Wise & Postman-Wise Daily Article Report to Excel.
+ * Strictly adheres to the 31 required columns and excludes EMTTS and Remarks.
+ */
+export async function exportDailyPostmanArticleReportToExcel(
+  reportData: DailyPostmanArticleReportData,
+  filename?: string
+) {
+  const XLSX = await getXLSX();
+  const rows: Record<string, any>[] = [];
+
+  for (const group of reportData.officeGroups) {
+    for (const pmRow of group.postmanRows) {
+      const isSub = pmRow.hasSubmission;
+      const recPctStr = pmRow.deliveryPercentage !== null ? `${pmRow.deliveryPercentage.toFixed(1)}%` : '';
+
+      const rowObj: Record<string, any> = {
+        'Sr. No.': pmRow.srNo,
+        'Office Name': pmRow.officeName,
+        'Postman Name': pmRow.postmanName,
+        'Last Balance': isSub && pmRow.lastBalance !== null ? pmRow.lastBalance : '',
+      };
+
+      // 10 Received categories
+      FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+        const val = isSub ? pmRow.received[cat.key] : null;
+        rowObj[`Received - ${cat.label}`] = val !== null && val !== undefined ? val : '';
+      });
+      rowObj['Received Total'] = isSub && pmRow.receivedTotal !== null ? pmRow.receivedTotal : '';
+
+      // 10 Delivered categories
+      FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+        const val = isSub ? pmRow.delivered[cat.key] : null;
+        rowObj[`Delivered - ${cat.label}`] = val !== null && val !== undefined ? val : '';
+      });
+      rowObj['Delivered Total'] = isSub && pmRow.deliveredTotal !== null ? pmRow.deliveredTotal : '';
+
+      rowObj['Returned to Sender'] = isSub && pmRow.returnedToSender !== null ? pmRow.returnedToSender : '';
+      rowObj['Missent'] = isSub && pmRow.missent !== null ? pmRow.missent : '';
+      rowObj['Deposit / Not Delivered'] = isSub && pmRow.deposit !== null ? pmRow.deposit : '';
+      rowObj['Delivery Percentage'] = isSub ? recPctStr : '';
+      rowObj['Report Status'] = pmRow.status;
+
+      rows.push(rowObj);
+    }
+
+    // Office Total Row
+    const offPctStr =
+      group.totals.deliveryPercentage !== null ? `${group.totals.deliveryPercentage.toFixed(1)}%` : '0.0%';
+
+    const officeTotalObj: Record<string, any> = {
+      'Sr. No.': '',
+      'Office Name': `${group.officeName} TOTAL`,
+      'Postman Name': `Total Postmen: ${group.totalRegisteredPostmen} (${group.submittedCount} Submitted - ${group.completionRate.toFixed(0)}%)`,
+      'Last Balance': group.totals.lastBalance,
+    };
+
+    FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+      officeTotalObj[`Received - ${cat.label}`] = group.totals.receivedByCategory[cat.key] || 0;
+    });
+    officeTotalObj['Received Total'] = group.totals.receivedTotal;
+
+    FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+      officeTotalObj[`Delivered - ${cat.label}`] = group.totals.deliveredByCategory[cat.key] || 0;
+    });
+    officeTotalObj['Delivered Total'] = group.totals.deliveredTotal;
+
+    officeTotalObj['Returned to Sender'] = group.totals.returnedToSender;
+    officeTotalObj['Missent'] = group.totals.missent;
+    officeTotalObj['Deposit / Not Delivered'] = group.totals.deposit;
+    officeTotalObj['Delivery Percentage'] = offPctStr;
+    officeTotalObj['Report Status'] =
+      group.submittedCount === group.totalRegisteredPostmen ? 'All Submitted' : 'Pending Submissions';
+
+    rows.push(officeTotalObj);
+  }
+
+  // Grand Total Row
+  const grandPctStr =
+    reportData.grandTotals.deliveryPercentage !== null
+      ? `${reportData.grandTotals.deliveryPercentage.toFixed(1)}%`
+      : '0.0%';
+
+  const grandTotalObj: Record<string, any> = {
+    'Sr. No.': '',
+    'Office Name': `GRAND TOTAL (${reportData.grandTotals.totalOffices} OFFICES)`,
+    'Postman Name': `Total Postmen: ${reportData.grandTotals.totalRegisteredPostmen} (${reportData.grandTotals.submittedCount} Submitted - ${reportData.grandTotals.completionRate.toFixed(1)}%)`,
+    'Last Balance': reportData.grandTotals.lastBalance,
+  };
+
+  FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+    grandTotalObj[`Received - ${cat.label}`] = reportData.grandTotals.receivedByCategory[cat.key] || 0;
+  });
+  grandTotalObj['Received Total'] = reportData.grandTotals.receivedTotal;
+
+  FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+    grandTotalObj[`Delivered - ${cat.label}`] = reportData.grandTotals.deliveredByCategory[cat.key] || 0;
+  });
+  grandTotalObj['Delivered Total'] = reportData.grandTotals.deliveredTotal;
+
+  grandTotalObj['Returned to Sender'] = reportData.grandTotals.returnedToSender;
+  grandTotalObj['Missent'] = reportData.grandTotals.missent;
+  grandTotalObj['Deposit / Not Delivered'] = reportData.grandTotals.deposit;
+  grandTotalObj['Delivery Percentage'] = grandPctStr;
+  grandTotalObj['Report Status'] = 'CONSOLIDATED';
+
+  rows.push(grandTotalObj);
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Postman Article Report');
+
+  const outName = filename || `Daily_Postman_Article_Report_${reportData.reportDate}`;
+  XLSX.writeFile(workbook, `${outName}.xlsx`);
+}
+
+/**
+ * Standard daily report export with postman-level support and backward compatibility.
+ */
+export async function exportDailyReportsToExcel(
+  reports: DailyReport[],
+  filename: string = 'Pakistan_Post_Daily_Reports',
+  postOffices?: PostOffice[],
+  targetDate?: string
+) {
+  if (postOffices && postOffices.length > 0 && targetDate) {
+    const reportData = buildDailyPostmanArticleReport(reports, postOffices, targetDate);
+    return exportDailyPostmanArticleReportToExcel(reportData, filename);
+  }
+
   const XLSX = await getXLSX();
   const totals = summarizeReports(reports);
   const grandDeliveryRate =
@@ -20,56 +159,36 @@ export async function exportDailyReportsToExcel(reports: DailyReport[], filename
         ? `${((r.delivered / r.receivedToday) * 100).toFixed(1)}%`
         : '0.0%';
 
-    const isSun = isSunday(r.date);
-    const isHol = isHoliday(r.date);
-    const holReason = getHolidayReason(r.date);
-    const dayName = getDayOfWeek(r.date);
-    const displayRemarks = isHol
-      ? `${holReason || 'Public Holiday'} (Official Closed)`
-      : isSun
-      ? 'Sunday Holiday (Weekly Closed)'
-      : (r.remarks || (r.submittedBy === 'NOT_SUBMITTED' ? 'Report not submitted till 5 PM' : 'N/A'));
-
     return {
-      'S.No': index + 1,
+      'Sr. No.': index + 1,
       'Date': formatDatePK(r.date),
-      'Day': dayName,
       'Office Name': r.officeName,
-      'Postman': r.postmanName || 'General',
+      'Postman Name': r.postmanName || 'General',
       'Last Balance': r.lastBalance,
-      'Articles Received': r.receivedToday,
-      'Delivered': r.delivered,
-      'Delivery %': rowDeliveryRate,
+      'Received Total': r.receivedToday,
+      'Delivered Total': r.delivered,
+      'Delivery Percentage': rowDeliveryRate,
       'Returned to Sender': r.returnedToSender,
       'Missent': r.missent,
-      'Deposit': r.deposit,
-      'Closing Balance': r.closingBalance,
-      'EMTTS Updated': r.emttsUpdated || 0,
-      'EMTTS Pending': r.emttsNotUpdated || 0,
-      'Remarks': displayRemarks,
-      'Submitted At': r.submittedAt || '-',
+      'Deposit / Not Delivered': r.deposit,
+      'Report Status': r.submittedBy === 'NOT_SUBMITTED' ? 'Report Not Submitted' : 'Submitted',
     };
   });
 
   // Add Grand Totals Row
   data.push({
-    'S.No': 0,
+    'Sr. No.': 0,
     'Date': 'GRAND TOTAL',
-    'Day': '-',
     'Office Name': `Total Records: ${reports.length}`,
-    'Postman': '-',
+    'Postman Name': '-',
     'Last Balance': totals.totalLastBalance,
-    'Articles Received': totals.totalReceived,
-    'Delivered': totals.totalDelivered,
-    'Delivery %': grandDeliveryRate,
+    'Received Total': totals.totalReceived,
+    'Delivered Total': totals.totalDelivered,
+    'Delivery Percentage': grandDeliveryRate,
     'Returned to Sender': totals.totalReturned,
     'Missent': totals.totalMissent,
-    'Deposit': totals.totalDeposit,
-    'Closing Balance': totals.totalClosingBalance,
-    'EMTTS Updated': reports.reduce((s, r) => s + (r.emttsUpdated || 0), 0),
-    'EMTTS Pending': reports.reduce((s, r) => s + (r.emttsNotUpdated || 0), 0),
-    'Remarks': 'SYSTEM CONSOLIDATED SUMMARY',
-    'Submitted At': new Date().toLocaleString(),
+    'Deposit / Not Delivered': totals.totalDeposit,
+    'Report Status': 'CONSOLIDATED',
   });
 
   const worksheet = XLSX.utils.json_to_sheet(data);

@@ -108,6 +108,25 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       Object.entries(editingReport.receivedBreakdown).forEach(([k, v]) => {
         initial[k] = String(v);
       });
+      // Migrate legacy RGL subcategories if editing older report
+      if (!initial.rgl && (initial.rgl_international || initial.rgl_domestic || initial.rgl_insured)) {
+        initial.rgl = String(
+          (Number(initial.rgl_international) || 0) +
+          (Number(initial.rgl_domestic) || 0) +
+          (Number(initial.rgl_insured) || 0)
+        );
+      }
+      // Migrate legacy Parcel subcategories if editing older report
+      if (!initial.parcel && (initial.parcel_international || initial.parcel_domestic || initial.parcel_insured)) {
+        initial.parcel = String(
+          (Number(initial.parcel_international) || 0) +
+          (Number(initial.parcel_domestic) || 0) +
+          (Number(initial.parcel_insured) || 0)
+        );
+      }
+      if (!initial.mo && initial.money_order) {
+        initial.mo = String(initial.money_order);
+      }
       return initial;
     }
     return {};
@@ -119,17 +138,40 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       Object.entries(editingReport.deliveredBreakdown).forEach(([k, v]) => {
         initial[k] = String(v);
       });
+      // Migrate legacy RGL subcategories if editing older report
+      if (!initial.rgl && (initial.rgl_international || initial.rgl_domestic || initial.rgl_insured)) {
+        initial.rgl = String(
+          (Number(initial.rgl_international) || 0) +
+          (Number(initial.rgl_domestic) || 0) +
+          (Number(initial.rgl_insured) || 0)
+        );
+      }
+      // Migrate legacy Parcel subcategories if editing older report
+      if (!initial.parcel && (initial.parcel_international || initial.parcel_domestic || initial.parcel_insured)) {
+        initial.parcel = String(
+          (Number(initial.parcel_international) || 0) +
+          (Number(initial.parcel_domestic) || 0) +
+          (Number(initial.parcel_insured) || 0)
+        );
+      }
+      if (!initial.mo && initial.money_order) {
+        initial.mo = String(initial.money_order);
+      }
       return initial;
     }
     return {};
   });
 
-  // Outcomes
+  // Outcomes - User enters numbers manually, NOT prefilled with 0 by default
   const [returnedToSender, setReturnedToSender] = useState<string>(
-    editingReport ? String(editingReport.returnedToSender) : '0'
+    editingReport?.returnedToSender !== undefined && editingReport.returnedToSender !== null
+      ? String(editingReport.returnedToSender)
+      : ''
   );
   const [missent, setMissent] = useState<string>(
-    editingReport ? String(editingReport.missent) : '0'
+    editingReport?.missent !== undefined && editingReport.missent !== null
+      ? String(editingReport.missent)
+      : ''
   );
   const [deposit, setDeposit] = useState<string>(
     editingReport ? String(editingReport.deposit) : ''

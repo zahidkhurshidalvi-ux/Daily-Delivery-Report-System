@@ -22,6 +22,49 @@ export function calculateClosingBalance(
   return lb + rec - del - ret - mis - dep;
 }
 
+export interface ReportSummaryTotals {
+  totalLastBalance: number;
+  totalReceived: number;
+  totalDelivered: number;
+  totalReturned: number;
+  totalMissent: number;
+  totalDeposit: number;
+  totalClosingBalance: number;
+}
+
+/**
+ * Summarizes an array of daily reports for aggregate displays.
+ */
+export function summarizeReports(reports: DailyReport[]): ReportSummaryTotals {
+  let totalLastBalance = 0;
+  let totalReceived = 0;
+  let totalDelivered = 0;
+  let totalReturned = 0;
+  let totalMissent = 0;
+  let totalDeposit = 0;
+  let totalClosingBalance = 0;
+
+  for (const r of reports) {
+    totalLastBalance += Number(r.lastBalance) || 0;
+    totalReceived += Number(r.receivedToday) || 0;
+    totalDelivered += Number(r.delivered) || 0;
+    totalReturned += Number(r.returnedToSender) || 0;
+    totalMissent += Number(r.missent) || 0;
+    totalDeposit += Number(r.deposit) || 0;
+    totalClosingBalance += Number(r.closingBalance) || 0;
+  }
+
+  return {
+    totalLastBalance,
+    totalReceived,
+    totalDelivered,
+    totalReturned,
+    totalMissent,
+    totalDeposit,
+    totalClosingBalance,
+  };
+}
+
 /**
  * Validates a daily report entry.
  * Returns an error message string if invalid, or null if valid.
@@ -152,31 +195,436 @@ export function getTodayDateString(timeZone: string = 'Asia/Karachi'): string {
   }
 }
 
+export interface FinalArticleCategory {
+  key: string;
+  label: string;
+  code: string;
+}
+
+export const FINAL_ARTICLE_CATEGORIES: FinalArticleCategory[] = [
+  { key: 'rgl', label: 'RGL', code: 'RGL' },
+  { key: 'parcel', label: 'Parcel', code: 'PARCEL' },
+  { key: 'ums', label: 'UMS', code: 'UMS' },
+  { key: 'ordinary', label: 'Ordinary', code: 'ORD' },
+  { key: 'excise', label: 'Excise', code: 'EXCISE' },
+  { key: 'vpp', label: 'VPP/VPL', code: 'VPP' },
+  { key: 'mo', label: 'MO', code: 'MO' },
+  { key: 'echallan', label: 'E-Challan', code: 'ECHALLAN' },
+  { key: 'cod', label: 'COD', code: 'COD' },
+  { key: 'medical', label: 'Medical', code: 'MED' },
+];
+
 /**
- * Summarize totals for a list of reports
+ * Returns normalized count for an article category from CategoryBreakdown.
+ * Automatically combines historical RGL subcategories (Intl + Domestic + Insured)
+ * and Parcel subcategories (Intl + Domestic + Insured) safely without double counting.
  */
-export function summarizeReports(reports: DailyReport[]) {
-  return reports.reduce(
-    (acc, curr) => {
-      acc.totalLastBalance += curr.lastBalance;
-      acc.totalReceived += curr.receivedToday;
-      acc.totalDelivered += curr.delivered;
-      acc.totalReturned += curr.returnedToSender;
-      acc.totalMissent += curr.missent;
-      acc.totalDeposit += curr.deposit;
-      acc.totalClosingBalance += curr.closingBalance;
-      return acc;
-    },
-    {
-      totalLastBalance: 0,
-      totalReceived: 0,
-      totalDelivered: 0,
-      totalReturned: 0,
-      totalMissent: 0,
-      totalDeposit: 0,
-      totalClosingBalance: 0,
+export function getCategoryCount(breakdown?: Record<string, any>, catKey: string = ''): number {
+  if (!breakdown || typeof breakdown !== 'object') return 0;
+
+  if (catKey === 'rgl') {
+    if (breakdown.rgl !== undefined && breakdown.rgl !== null && breakdown.rgl !== '') {
+      return Math.max(0, Number(breakdown.rgl) || 0);
     }
-  );
+    const intl = Number(breakdown.rgl_international || breakdown.rgl_intl) || 0;
+    const dom = Number(breakdown.rgl_domestic || breakdown.rgl_dom) || 0;
+    const ins = Number(breakdown.rgl_insured || breakdown.rgl_ins) || 0;
+    return Math.max(0, intl + dom + ins);
+  }
+
+  if (catKey === 'parcel') {
+    if (breakdown.parcel !== undefined && breakdown.parcel !== null && breakdown.parcel !== '') {
+      return Math.max(0, Number(breakdown.parcel) || 0);
+    }
+    const intl = Number(breakdown.parcel_international || breakdown.parcel_intl) || 0;
+    const dom = Number(breakdown.parcel_domestic || breakdown.parcel_dom) || 0;
+    const ins = Number(breakdown.parcel_insured || breakdown.parcel_ins) || 0;
+    return Math.max(0, intl + dom + ins);
+  }
+
+  if (catKey === 'mo') {
+    return Math.max(0, Number(breakdown.mo ?? breakdown.money_order ?? breakdown.emo) || 0);
+  }
+
+  if (catKey === 'echallan') {
+    return Math.max(0, Number(breakdown.echallan ?? breakdown.e_challan ?? breakdown['e-challan']) || 0);
+  }
+
+  if (catKey === 'vpp') {
+    return Math.max(0, Number(breakdown.vpp ?? breakdown.vpp_vpl ?? breakdown['vpp/vpl']) || 0);
+  }
+
+  if (catKey === 'medical') {
+    return Math.max(0, Number(breakdown.medical ?? breakdown.med) || 0);
+  }
+
+  return Math.max(0, Number(breakdown[catKey]) || 0);
+}
+
+export type ReportSubmissionStatus = 'Submitted' | 'Report Not Submitted' | 'Incomplete';
+
+export interface PostmanReportRow {
+  srNo: number;
+  officeName: string;
+  postmanId?: string;
+  postmanName: string;
+  isRegisteredPostman: boolean;
+  status: ReportSubmissionStatus;
+  hasSubmission: boolean;
+  report?: DailyReport;
+  lastBalance: number | null;
+  received: Record<string, number | null>;
+  receivedTotal: number | null;
+  delivered: Record<string, number | null>;
+  deliveredTotal: number | null;
+  totalAvailable: number | null;
+  returnedToSender: number | null;
+  missent: number | null;
+  deposit: number | null;
+  deliveryPercentage: number | null;
+}
+
+export interface OfficeReportGroup {
+  officeName: string;
+  office: PostOffice;
+  postmanRows: PostmanReportRow[];
+  totalRegisteredPostmen: number;
+  submittedCount: number;
+  notSubmittedCount: number;
+  incompleteCount: number;
+  completionRate: number; // percentage (0 - 100)
+  totals: {
+    lastBalance: number;
+    receivedByCategory: Record<string, number>;
+    receivedTotal: number;
+    deliveredByCategory: Record<string, number>;
+    deliveredTotal: number;
+    totalAvailable: number;
+    returnedToSender: number;
+    missent: number;
+    deposit: number;
+    deliveryPercentage: number | null;
+  };
+}
+
+export interface DailyPostmanArticleReportData {
+  reportDate: string;
+  officeGroups: OfficeReportGroup[];
+  allRows: PostmanReportRow[];
+  grandTotals: {
+    totalOffices: number;
+    totalRegisteredPostmen: number;
+    submittedCount: number;
+    notSubmittedCount: number;
+    incompleteCount: number;
+    completionRate: number;
+    lastBalance: number;
+    receivedByCategory: Record<string, number>;
+    receivedTotal: number;
+    deliveredByCategory: Record<string, number>;
+    deliveredTotal: number;
+    totalAvailable: number;
+    returnedToSender: number;
+    missent: number;
+    deposit: number;
+    deliveryPercentage: number | null;
+  };
+}
+
+/**
+ * Builds the comprehensive Office-Wise & Postman-Wise Daily Article Report.
+ * Includes EVERY registered postman for each active office on targetDate.
+ */
+export function buildDailyPostmanArticleReport(
+  reports: DailyReport[],
+  postOffices: PostOffice[],
+  targetDate: string
+): DailyPostmanArticleReportData {
+  const validOffices = cleanAndFilterPostOffices(postOffices);
+  const validReports = cleanAndFilterReports(reports);
+  const targetIso = normalizeDateToIso(targetDate) || targetDate;
+
+  // Active offices applicable for targetDate
+  const activeOffices = validOffices.filter((po) => {
+    if (po.status !== 'ACTIVE') return false;
+    const start = getOfficeEffectiveStartDate(po, validReports);
+    return targetIso >= start;
+  });
+
+  // Filter reports submitted specifically for targetDate
+  const dateReports = validReports.filter((r) => {
+    const rDate = normalizeDateToIso(r.date) || r.date;
+    return rDate === targetIso;
+  });
+
+  const normKey = (s: string) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+
+  let globalSrNo = 1;
+  const officeGroups: OfficeReportGroup[] = [];
+  const allRows: PostmanReportRow[] = [];
+
+  for (const office of activeOffices) {
+    const officeNorm = normKey(office.name);
+    const officeReports = dateReports.filter((r) => normKey(r.officeName) === officeNorm);
+
+    // Get active registered postmen for this office
+    const registeredPostmen = (office.postmen || []).filter((pm) => pm.status !== 'INACTIVE');
+
+    const postmanRows: PostmanReportRow[] = [];
+
+    if (registeredPostmen.length > 0) {
+      for (const pm of registeredPostmen) {
+        const pmNorm = normKey(pm.name);
+        const rep = officeReports.find((r) => {
+          if (r.postmanId && r.postmanId === pm.id) return true;
+          if (r.postmanName && normKey(r.postmanName) === pmNorm) return true;
+          return false;
+        });
+
+        const row = createPostmanRow(globalSrNo++, office.name, pm.name, pm.id, true, rep);
+        postmanRows.push(row);
+        allRows.push(row);
+      }
+    } else if (officeReports.length > 0) {
+      // Office has no registered postman roster, but has submitted reports
+      for (const rep of officeReports) {
+        const pmName = rep.postmanName || (office.postmasterName ? `${office.postmasterName} (Incharge)` : 'General Postman / Incharge');
+        const row = createPostmanRow(globalSrNo++, office.name, pmName, rep.postmanId, false, rep);
+        postmanRows.push(row);
+        allRows.push(row);
+      }
+    } else {
+      // Office has no postman roster and no submission -> 1 row for office incharge
+      const pmName = office.postmasterName ? `${office.postmasterName} (Incharge)` : 'Incharge / General Postman';
+      const row = createPostmanRow(globalSrNo++, office.name, pmName, undefined, false, undefined);
+      postmanRows.push(row);
+      allRows.push(row);
+    }
+
+    // Calculate Office Summary
+    const totalRegisteredPostmen = registeredPostmen.length > 0 ? registeredPostmen.length : 1;
+    let submittedCount = 0;
+    let notSubmittedCount = 0;
+    let incompleteCount = 0;
+
+    const officeTotals = {
+      lastBalance: 0,
+      receivedByCategory: {} as Record<string, number>,
+      receivedTotal: 0,
+      deliveredByCategory: {} as Record<string, number>,
+      deliveredTotal: 0,
+      totalAvailable: 0,
+      returnedToSender: 0,
+      missent: 0,
+      deposit: 0,
+      deliveryPercentage: null as number | null,
+    };
+
+    FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+      officeTotals.receivedByCategory[cat.key] = 0;
+      officeTotals.deliveredByCategory[cat.key] = 0;
+    });
+
+    for (const row of postmanRows) {
+      if (row.status === 'Submitted') submittedCount++;
+      else if (row.status === 'Incomplete') incompleteCount++;
+      else notSubmittedCount++;
+
+      if (row.hasSubmission) {
+        officeTotals.lastBalance += row.lastBalance || 0;
+        officeTotals.receivedTotal += row.receivedTotal || 0;
+        officeTotals.deliveredTotal += row.deliveredTotal || 0;
+        officeTotals.totalAvailable += row.totalAvailable || 0;
+        officeTotals.returnedToSender += row.returnedToSender || 0;
+        officeTotals.missent += row.missent || 0;
+        officeTotals.deposit += row.deposit || 0;
+
+        FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+          officeTotals.receivedByCategory[cat.key] += row.received[cat.key] || 0;
+          officeTotals.deliveredByCategory[cat.key] += row.delivered[cat.key] || 0;
+        });
+      }
+    }
+
+    const completionRate = totalRegisteredPostmen > 0 ? (submittedCount / totalRegisteredPostmen) * 100 : 0;
+    if (officeTotals.totalAvailable > 0) {
+      officeTotals.deliveryPercentage = (officeTotals.deliveredTotal / officeTotals.totalAvailable) * 100;
+    }
+
+    officeGroups.push({
+      officeName: office.name,
+      office,
+      postmanRows,
+      totalRegisteredPostmen,
+      submittedCount,
+      notSubmittedCount,
+      incompleteCount,
+      completionRate,
+      totals: officeTotals,
+    });
+  }
+
+  // Calculate Grand Totals across all offices
+  const grandTotals = {
+    totalOffices: officeGroups.length,
+    totalRegisteredPostmen: 0,
+    submittedCount: 0,
+    notSubmittedCount: 0,
+    incompleteCount: 0,
+    completionRate: 0,
+    lastBalance: 0,
+    receivedByCategory: {} as Record<string, number>,
+    receivedTotal: 0,
+    deliveredByCategory: {} as Record<string, number>,
+    deliveredTotal: 0,
+    totalAvailable: 0,
+    returnedToSender: 0,
+    missent: 0,
+    deposit: 0,
+    deliveryPercentage: null as number | null,
+  };
+
+  FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+    grandTotals.receivedByCategory[cat.key] = 0;
+    grandTotals.deliveredByCategory[cat.key] = 0;
+  });
+
+  for (const group of officeGroups) {
+    grandTotals.totalRegisteredPostmen += group.totalRegisteredPostmen;
+    grandTotals.submittedCount += group.submittedCount;
+    grandTotals.notSubmittedCount += group.notSubmittedCount;
+    grandTotals.incompleteCount += group.incompleteCount;
+
+    grandTotals.lastBalance += group.totals.lastBalance;
+    grandTotals.receivedTotal += group.totals.receivedTotal;
+    grandTotals.deliveredTotal += group.totals.deliveredTotal;
+    grandTotals.totalAvailable += group.totals.totalAvailable;
+    grandTotals.returnedToSender += group.totals.returnedToSender;
+    grandTotals.missent += group.totals.missent;
+    grandTotals.deposit += group.totals.deposit;
+
+    FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+      grandTotals.receivedByCategory[cat.key] += group.totals.receivedByCategory[cat.key] || 0;
+      grandTotals.deliveredByCategory[cat.key] += group.totals.deliveredByCategory[cat.key] || 0;
+    });
+  }
+
+  if (grandTotals.totalRegisteredPostmen > 0) {
+    grandTotals.completionRate = (grandTotals.submittedCount / grandTotals.totalRegisteredPostmen) * 100;
+  }
+  if (grandTotals.totalAvailable > 0) {
+    grandTotals.deliveryPercentage = (grandTotals.deliveredTotal / grandTotals.totalAvailable) * 100;
+  }
+
+  return {
+    reportDate: targetDate,
+    officeGroups,
+    allRows,
+    grandTotals,
+  };
+}
+
+function createPostmanRow(
+  srNo: number,
+  officeName: string,
+  postmanName: string,
+  postmanId: string | undefined,
+  isRegisteredPostman: boolean,
+  report?: DailyReport
+): PostmanReportRow {
+  const isMissingReport = !report || report.submittedBy === 'NOT_SUBMITTED' || report.remarks?.includes('Report not submitted');
+
+  if (isMissingReport) {
+    const emptyRec: Record<string, number | null> = {};
+    const emptyDel: Record<string, number | null> = {};
+    FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+      emptyRec[cat.key] = null;
+      emptyDel[cat.key] = null;
+    });
+
+    return {
+      srNo,
+      officeName,
+      postmanId,
+      postmanName,
+      isRegisteredPostman,
+      status: 'Report Not Submitted',
+      hasSubmission: false,
+      report,
+      lastBalance: null,
+      received: emptyRec,
+      receivedTotal: null,
+      delivered: emptyDel,
+      deliveredTotal: null,
+      totalAvailable: null,
+      returnedToSender: null,
+      missent: null,
+      deposit: null,
+      deliveryPercentage: null,
+    };
+  }
+
+  // Populate actual figures
+  const lastBal = Number(report.lastBalance) || 0;
+  const recMap: Record<string, number | null> = {};
+  const delMap: Record<string, number | null> = {};
+  let recSum = 0;
+  let delSum = 0;
+
+  FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+    const rVal = getCategoryCount(report.receivedBreakdown, cat.key);
+    recMap[cat.key] = rVal;
+    recSum += rVal;
+
+    const dVal = getCategoryCount(report.deliveredBreakdown, cat.key);
+    delMap[cat.key] = dVal;
+    delSum += dVal;
+  });
+
+  // If breakdown was completely empty, fallback to legacy top-level totals
+  if (recSum === 0 && (Number(report.receivedToday) || 0) > 0) {
+    recSum = Number(report.receivedToday) || 0;
+  }
+  if (delSum === 0 && (Number(report.delivered) || 0) > 0) {
+    delSum = Number(report.delivered) || 0;
+  }
+
+  const totalAvail = lastBal + recSum;
+  const retVal = report.returnedToSender !== undefined && report.returnedToSender !== null ? Number(report.returnedToSender) || 0 : null;
+  const misVal = report.missent !== undefined && report.missent !== null ? Number(report.missent) || 0 : null;
+
+  // Deposit / Not Delivered = Total Available - Delivered - Returned - Missent
+  const calcDeposit = totalAvail - delSum - (retVal || 0) - (misVal || 0);
+  const finalDeposit = report.deposit !== undefined && report.deposit !== null ? Number(report.deposit) : calcDeposit;
+
+  const delPct = totalAvail > 0 ? (delSum / totalAvail) * 100 : 0;
+
+  // Check if Incomplete
+  let status: ReportSubmissionStatus = 'Submitted';
+  if (lastBal < 0 || recSum < 0 || delSum < 0 || (retVal !== null && retVal < 0) || (misVal !== null && misVal < 0)) {
+    status = 'Incomplete';
+  }
+
+  return {
+    srNo,
+    officeName,
+    postmanId,
+    postmanName,
+    isRegisteredPostman,
+    status,
+    hasSubmission: true,
+    report,
+    lastBalance: lastBal,
+    received: recMap,
+    receivedTotal: recSum,
+    delivered: delMap,
+    deliveredTotal: delSum,
+    totalAvailable: totalAvail,
+    returnedToSender: retVal,
+    missent: misVal,
+    deposit: finalDeposit,
+    deliveryPercentage: delPct,
+  };
 }
 
 /**

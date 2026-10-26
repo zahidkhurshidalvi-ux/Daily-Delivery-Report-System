@@ -3,8 +3,12 @@ import { DailyReport, PostOffice } from '../types';
 import {
   generateDailyReportPDF,
   triggerPrintableWindow,
+  triggerDailyPostmanArticleReportPrint,
 } from '../utils/pdfGenerator';
-import { exportDailyReportsToExcel } from '../utils/excelExport';
+import {
+  exportDailyReportsToExcel,
+  exportDailyPostmanArticleReportToExcel,
+} from '../utils/excelExport';
 import {
   formatDatePK,
   formatNumber,
@@ -15,6 +19,7 @@ import {
   isHoliday,
   getHolidayReason,
   SYSTEM_LAUNCH_DATE,
+  buildDailyPostmanArticleReport,
 } from '../utils/calculations';
 import {
   Printer,
@@ -56,11 +61,17 @@ export const PdfExportView: React.FC<PdfExportViewProps> = ({
   };
 
   const handlePrint = () => {
-    triggerPrintableWindow(dateReports, selectedDate);
+    const reportData = buildDailyPostmanArticleReport(reports, postOffices, selectedDate);
+    triggerDailyPostmanArticleReportPrint(reportData, divisionName);
   };
 
   const handleExcelExport = () => {
-    exportDailyReportsToExcel(dateReports, `Pakistan_Post_Report_${selectedDate}`);
+    exportDailyReportsToExcel(
+      reports,
+      `Pakistan_Post_Daily_Postman_Report_${selectedDate}`,
+      postOffices,
+      selectedDate
+    );
   };
 
   return (
