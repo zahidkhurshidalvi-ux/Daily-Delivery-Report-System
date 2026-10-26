@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { PostOffice, Postman } from '../types';
 import { cleanAndFilterPostOffices, isInvalidPostOfficeName } from '../utils/calculations';
 import {
@@ -52,6 +52,21 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
   const [pmBeat, setPmBeat] = useState('');
   const [pmMobile, setPmMobile] = useState('');
   const [pmStatus, setPmStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [pmFeedback, setPmFeedback] = useState('');
+
+  // Keep managingPostmenOffice in sync when postOffices prop updates
+  useEffect(() => {
+    if (managingPostmenOffice) {
+      const refreshed = postOffices.find(
+        (o) =>
+          o.id === managingPostmenOffice.id ||
+          (o.name || '').toLowerCase().trim() === (managingPostmenOffice.name || '').toLowerCase().trim()
+      );
+      if (refreshed) {
+        setManagingPostmenOffice(refreshed);
+      }
+    }
+  }, [postOffices]);
 
   // Bulk Import State
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -184,6 +199,8 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
 
     onSaveOffice(updatedOffice);
     setManagingPostmenOffice(updatedOffice);
+    setPmFeedback(`Postman "${cleanPmName}" saved in database & cloud!`);
+    setTimeout(() => setPmFeedback(''), 3500);
     handleCancelEditPostman();
   };
 
@@ -201,12 +218,15 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
       };
       onSaveOffice(updatedOffice);
       setManagingPostmenOffice(updatedOffice);
+      setPmFeedback(`Postman "${target.name}" removed from database!`);
+      setTimeout(() => setPmFeedback(''), 3500);
     }
   };
 
   const handleTogglePostmanStatus = (pmId: string) => {
     if (!managingPostmenOffice) return;
     const currentPostmen = managingPostmenOffice.postmen || [];
+    const target = currentPostmen.find((p) => p.id === pmId);
     const updatedPostmen = currentPostmen.map((p) =>
       p.id === pmId ? { ...p, status: (p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE') as 'ACTIVE' | 'INACTIVE' } : p
     );
@@ -216,6 +236,8 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
     };
     onSaveOffice(updatedOffice);
     setManagingPostmenOffice(updatedOffice);
+    setPmFeedback(`Status updated for "${target?.name || 'postman'}"!`);
+    setTimeout(() => setPmFeedback(''), 3500);
   };
 
   // Process and parse bulk office text
@@ -827,6 +849,12 @@ export const PostOfficesManager: React.FC<PostOfficesManagerProps> = ({
             </div>
 
             <div className="p-5 space-y-5 text-xs max-h-[80vh] overflow-y-auto">
+              {pmFeedback && (
+                <div className="bg-emerald-100 border border-emerald-300 text-emerald-900 px-3.5 py-2 rounded-lg flex items-center space-x-2 font-bold text-xs shadow-2xs">
+                  <Check className="w-4 h-4 text-[#006633]" />
+                  <span>{pmFeedback}</span>
+                </div>
+              )}
               {/* Add / Edit Postman Form */}
               <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-4">
                 <h4 className="font-extrabold text-gray-900 mb-2 flex items-center space-x-1.5 text-xs">

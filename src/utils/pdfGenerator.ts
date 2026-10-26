@@ -1231,11 +1231,16 @@ export function triggerDailyPostmanArticleReportPrint(
           <h1>PAKISTAN POST</h1>
           <h2>OFFICE OF THE DIVISIONAL SUPERINTENDENT POSTAL SERVICES ${divisionName.toUpperCase()}</h2>
           <div>
-            <span class="title-badge">DAILY POSTMAN ARTICLE REPORT</span>
+            <span class="title-badge">${reportData.isDateRange ? 'MULTI-DATE POSTMAN ARTICLE REPORT' : 'DAILY POSTMAN ARTICLE REPORT'}</span>
           </div>
-          <div class="title-sub">Office Wise & Postman Wise</div>
+          <div class="title-sub">Office Wise &amp; Postman Wise (All 10 Categories)</div>
           <div class="meta-bar">
-            <div>DATE: <u>${formatDatePK(reportData.reportDate)}${isHol ? ` (${holReason || 'Public Holiday'})` : isSun ? ' (Sunday Holiday)' : ''}</u></div>
+            <div>
+              ${reportData.isDateRange 
+                ? `PERIOD: <u>${reportData.startDate ? formatDatePK(reportData.startDate) : ''} TO ${reportData.endDate ? formatDatePK(reportData.endDate) : ''} (${reportData.totalDaysInRange || 1} DAYS)</u>` 
+                : `DATE: <u>${formatDatePK(reportData.reportDate)}${isHol ? ` (${holReason || 'Public Holiday'})` : isSun ? ' (Sunday Holiday)' : ''}</u>`
+              }
+            </div>
             <div>TOTAL OFFICES: <u>${reportData.grandTotals.totalOffices}</u></div>
             <div>REGISTERED POSTMEN: <u>${reportData.grandTotals.totalRegisteredPostmen}</u></div>
             <div>SUBMISSIONS: <u>${reportData.grandTotals.submittedCount} / ${reportData.grandTotals.totalRegisteredPostmen} (${reportData.grandTotals.completionRate.toFixed(1)}%)</u></div>

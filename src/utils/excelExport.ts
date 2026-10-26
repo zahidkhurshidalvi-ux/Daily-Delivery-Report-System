@@ -57,7 +57,9 @@ export async function exportDailyPostmanArticleReportToExcel(
       rowObj['Missent'] = isSub && pmRow.missent !== null ? pmRow.missent : '';
       rowObj['Deposit / Not Delivered'] = isSub && pmRow.deposit !== null ? pmRow.deposit : '';
       rowObj['Delivery Percentage'] = isSub ? recPctStr : '';
-      rowObj['Report Status'] = pmRow.status;
+      rowObj['Report Status'] = reportData.isDateRange && pmRow.submissionCount !== undefined
+        ? `${pmRow.submissionCount}/${reportData.totalDaysInRange || 1} Days (${pmRow.status})`
+        : pmRow.status;
 
       rows.push(rowObj);
     }

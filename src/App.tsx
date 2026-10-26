@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, DailyReport, PostOffice, WhatsAppConfig, TriggerConfig, SystemLog, ArticleCategoryConfig } from './types';
+import { User, DailyReport, PostOffice, Postman, WhatsAppConfig, TriggerConfig, SystemLog, ArticleCategoryConfig } from './types';
 import {
   INITIAL_POST_OFFICES,
   INITIAL_USERS,
@@ -52,6 +52,28 @@ import { UserManagement } from './components/UserManagement';
 import { IssueExplanation } from './components/IssueExplanation';
 import { SystemLogs } from './components/SystemLogs';
 
+// Helper function to intelligently merge postmen lists
+function mergePostmenLists(existing?: Postman[], incoming?: Postman[]): Postman[] {
+  const ex = Array.isArray(existing) ? existing : [];
+  const inc = Array.isArray(incoming) ? incoming : [];
+  if (inc.length === 0) return ex;
+  if (ex.length === 0) return inc;
+
+  const map = new Map<string, Postman>();
+  ex.forEach((p) => {
+    const key = p.id || (p.name || '').toLowerCase().trim();
+    if (key) map.set(key, { ...p });
+  });
+  inc.forEach((p) => {
+    const key = p.id || (p.name || '').toLowerCase().trim();
+    if (key) {
+      const prev = map.get(key);
+      map.set(key, { ...(prev || {}), ...p });
+    }
+  });
+  return Array.from(map.values());
+}
+
 // Helper function to merge two post office lists preserving contact numbers and mobile numbers
 function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[]): PostOffice[] {
   const officeMap = new Map<string, PostOffice>();
@@ -71,6 +93,7 @@ function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[
     if (!key) return;
     const existing = officeMap.get(key);
     if (existing) {
+      const mergedPostmen = mergePostmenLists(existing.postmen, inc.postmen);
       officeMap.set(key, {
         ...existing,
         ...inc,
@@ -80,9 +103,10 @@ function mergeOfficesPreservingData(current: PostOffice[], incoming: PostOffice[
         postmasterName: (inc.postmasterName && inc.postmasterName.trim()) || existing.postmasterName || 'Postmaster',
         status: inc.status || existing.status || 'ACTIVE',
         initialBalance: typeof inc.initialBalance === 'number' ? inc.initialBalance : existing.initialBalance,
+        postmen: mergedPostmen,
       });
     } else {
-      officeMap.set(key, { ...inc });
+      officeMap.set(key, { ...inc, postmen: Array.isArray(inc.postmen) ? inc.postmen : [] });
     }
   });
 
@@ -423,7 +447,7 @@ export default function App() {
   };
 
   // Master Data Office CRUD
-  const handleSaveOffice = (office: PostOffice) => {
+  const handleSaveOffice = async (office: PostOffice) => {
     if (!office.name || isInvalidPostOfficeName(office.name)) return;
     let updated: PostOffice[];
     const targetNameLower = (office.name || '').toLowerCase().trim();
@@ -433,10 +457,13 @@ export default function App() {
     if (exists) {
       updated = postOffices.map((p) => {
         if (p.id === office.id || (p.name || '').toLowerCase().trim() === targetNameLower) {
+          const mergedPostmen = office.postmen !== undefined ? office.postmen : (p.postmen || []);
           return {
             ...p,
             ...office,
+            id: p.id || office.id,
             mobileNumber: office.mobileNumber !== undefined ? office.mobileNumber : p.mobileNumber,
+            postmen: mergedPostmen,
           };
         }
         return p;
@@ -448,7 +475,14 @@ export default function App() {
     }
     const cleaned = cleanAndFilterPostOffices(updated);
     setPostOffices(cleaned);
-    savePostOfficeToCloud(office);
+    postOfficesRef.current = cleaned;
+    safeStorage.setItem('pakpost_offices', JSON.stringify(cleaned));
+
+    // Find the exact merged and cleaned office record to persist to Firestore
+    const officeToPersist = cleaned.find(
+      (p) => p.id === office.id || (p.name || '').toLowerCase().trim() === targetNameLower
+    ) || office;
+    await savePostOfficeToCloud(officeToPersist);
   };
 
   const handleToggleOfficeStatus = (officeId: string) => {

@@ -1,4 +1,4 @@
-import { DailyReport, PostOffice, OfficialHoliday } from '../types';
+import { DailyReport, PostOffice, OfficialHoliday, Postman } from '../types';
 
 /**
  * Calculates Today's Closing Balance using the official formula:
@@ -282,6 +282,7 @@ export interface PostmanReportRow {
   missent: number | null;
   deposit: number | null;
   deliveryPercentage: number | null;
+  submissionCount?: number;
 }
 
 export interface OfficeReportGroup {
@@ -309,6 +310,10 @@ export interface OfficeReportGroup {
 
 export interface DailyPostmanArticleReportData {
   reportDate: string;
+  startDate?: string;
+  endDate?: string;
+  isDateRange?: boolean;
+  totalDaysInRange?: number;
   officeGroups: OfficeReportGroup[];
   allRows: PostmanReportRow[];
   grandTotals: {
@@ -332,29 +337,39 @@ export interface DailyPostmanArticleReportData {
 }
 
 /**
- * Builds the comprehensive Office-Wise & Postman-Wise Daily Article Report.
- * Includes EVERY registered postman for each active office on targetDate.
+ * Builds the comprehensive Office-Wise & Postman-Wise Article Report.
+ * Supports single date and multi-date / date range consolidation.
+ * Includes EVERY registered postman for each active office.
  */
 export function buildDailyPostmanArticleReport(
   reports: DailyReport[],
   postOffices: PostOffice[],
-  targetDate: string
+  targetDate: string,
+  endDate?: string
 ): DailyPostmanArticleReportData {
   const validOffices = cleanAndFilterPostOffices(postOffices);
   const validReports = cleanAndFilterReports(reports);
-  const targetIso = normalizeDateToIso(targetDate) || targetDate;
 
-  // Active offices applicable for targetDate
+  const iso1 = normalizeDateToIso(targetDate) || targetDate;
+  const iso2 = endDate ? normalizeDateToIso(endDate) || endDate : iso1;
+  const [minDate, maxDate] = iso1 <= iso2 ? [iso1, iso2] : [iso2, iso1];
+  const isDateRange = Boolean(endDate && iso1 !== iso2);
+
+  // Active offices applicable for the date/period
   const activeOffices = validOffices.filter((po) => {
     if (po.status !== 'ACTIVE') return false;
     const start = getOfficeEffectiveStartDate(po, validReports);
-    return targetIso >= start;
+    return maxDate >= start;
   });
 
-  // Filter reports submitted specifically for targetDate
-  const dateReports = validReports.filter((r) => {
+  // Filter reports within the date range
+  const relevantReports = validReports.filter((r) => {
     const rDate = normalizeDateToIso(r.date) || r.date;
-    return rDate === targetIso;
+    if (!rDate) return false;
+    if (isDateRange) {
+      return rDate >= minDate && rDate <= maxDate;
+    }
+    return rDate === minDate;
   });
 
   const normKey = (s: string) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
@@ -365,44 +380,79 @@ export function buildDailyPostmanArticleReport(
 
   for (const office of activeOffices) {
     const officeNorm = normKey(office.name);
-    const officeReports = dateReports.filter((r) => normKey(r.officeName) === officeNorm);
+    const officeReports = relevantReports.filter((r) => normKey(r.officeName) === officeNorm);
 
     // Get active registered postmen for this office
     const registeredPostmen = (office.postmen || []).filter((pm) => pm.status !== 'INACTIVE');
-
     const postmanRows: PostmanReportRow[] = [];
 
-    if (registeredPostmen.length > 0) {
-      for (const pm of registeredPostmen) {
-        const pmNorm = normKey(pm.name);
-        const rep = officeReports.find((r) => {
-          if (r.postmanId && r.postmanId === pm.id) return true;
-          if (r.postmanName && normKey(r.postmanName) === pmNorm) return true;
-          return false;
-        });
+    if (isDateRange) {
+      // MULTI-DATE DATE RANGE AGGREGATION
+      if (registeredPostmen.length > 0) {
+        for (const pm of registeredPostmen) {
+          const pmNorm = normKey(pm.name);
+          const pReports = officeReports.filter((r) => {
+            if (r.postmanId && r.postmanId === pm.id) return true;
+            if (r.postmanName && normKey(r.postmanName) === pmNorm) return true;
+            return false;
+          });
 
-        const row = createPostmanRow(globalSrNo++, office.name, pm.name, pm.id, true, rep);
-        postmanRows.push(row);
-        allRows.push(row);
-      }
-    } else if (officeReports.length > 0) {
-      // Office has no registered postman roster, but has submitted reports
-      for (const rep of officeReports) {
-        const pmName = rep.postmanName || (office.postmasterName ? `${office.postmasterName} (Incharge)` : 'General Postman / Incharge');
-        const row = createPostmanRow(globalSrNo++, office.name, pmName, rep.postmanId, false, rep);
+          const row = createPostmanRangeRow(globalSrNo++, office.name, pm.name, pm.id, true, pReports);
+          postmanRows.push(row);
+          allRows.push(row);
+        }
+      } else if (officeReports.length > 0) {
+        // Group by distinct postman names or general submissions
+        const pmMap = new Map<string, DailyReport[]>();
+        for (const rep of officeReports) {
+          const k = normKey(rep.postmanName || rep.postmanId || 'incharge');
+          if (!pmMap.has(k)) pmMap.set(k, []);
+          pmMap.get(k)!.push(rep);
+        }
+        for (const reps of pmMap.values()) {
+          const pmName = reps[0].postmanName || (office.postmasterName ? `${office.postmasterName} (Incharge)` : 'General Postman / Incharge');
+          const row = createPostmanRangeRow(globalSrNo++, office.name, pmName, reps[0].postmanId, false, reps);
+          postmanRows.push(row);
+          allRows.push(row);
+        }
+      } else {
+        const pmName = office.postmasterName ? `${office.postmasterName} (Incharge)` : 'Incharge / General Postman';
+        const row = createPostmanRangeRow(globalSrNo++, office.name, pmName, undefined, false, []);
         postmanRows.push(row);
         allRows.push(row);
       }
     } else {
-      // Office has no postman roster and no submission -> 1 row for office incharge
-      const pmName = office.postmasterName ? `${office.postmasterName} (Incharge)` : 'Incharge / General Postman';
-      const row = createPostmanRow(globalSrNo++, office.name, pmName, undefined, false, undefined);
-      postmanRows.push(row);
-      allRows.push(row);
+      // SINGLE DATE MODE
+      if (registeredPostmen.length > 0) {
+        for (const pm of registeredPostmen) {
+          const pmNorm = normKey(pm.name);
+          const rep = officeReports.find((r) => {
+            if (r.postmanId && r.postmanId === pm.id) return true;
+            if (r.postmanName && normKey(r.postmanName) === pmNorm) return true;
+            return false;
+          });
+
+          const row = createPostmanRow(globalSrNo++, office.name, pm.name, pm.id, true, rep);
+          postmanRows.push(row);
+          allRows.push(row);
+        }
+      } else if (officeReports.length > 0) {
+        for (const rep of officeReports) {
+          const pmName = rep.postmanName || (office.postmasterName ? `${office.postmasterName} (Incharge)` : 'General Postman / Incharge');
+          const row = createPostmanRow(globalSrNo++, office.name, pmName, rep.postmanId, false, rep);
+          postmanRows.push(row);
+          allRows.push(row);
+        }
+      } else {
+        const pmName = office.postmasterName ? `${office.postmasterName} (Incharge)` : 'Incharge / General Postman';
+        const row = createPostmanRow(globalSrNo++, office.name, pmName, undefined, false, undefined);
+        postmanRows.push(row);
+        allRows.push(row);
+      }
     }
 
     // Calculate Office Summary
-    const totalRegisteredPostmen = registeredPostmen.length > 0 ? registeredPostmen.length : 1;
+    const totalRegisteredPostmen = registeredPostmen.length > 0 ? registeredPostmen.length : (postmanRows.length || 1);
     let submittedCount = 0;
     let notSubmittedCount = 0;
     let incompleteCount = 0;
@@ -516,8 +566,16 @@ export function buildDailyPostmanArticleReport(
     grandTotals.deliveryPercentage = (grandTotals.deliveredTotal / grandTotals.totalAvailable) * 100;
   }
 
+  const daysDiff = isDateRange
+    ? Math.max(1, Math.round((new Date(maxDate).getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24)) + 1)
+    : 1;
+
   return {
-    reportDate: targetDate,
+    reportDate: isDateRange ? `${minDate} to ${maxDate}` : minDate,
+    startDate: minDate,
+    endDate: maxDate,
+    isDateRange,
+    totalDaysInRange: daysDiff,
     officeGroups,
     allRows,
     grandTotals,
@@ -624,6 +682,125 @@ function createPostmanRow(
     missent: misVal,
     deposit: finalDeposit,
     deliveryPercentage: delPct,
+  };
+}
+
+/**
+ * Creates an aggregated PostmanReportRow across a date range.
+ */
+function createPostmanRangeRow(
+  srNo: number,
+  officeName: string,
+  postmanName: string,
+  postmanId: string | undefined,
+  isRegisteredPostman: boolean,
+  pReports: DailyReport[]
+): PostmanReportRow {
+  const valid = pReports.filter(
+    (r) => r && r.submittedBy !== 'NOT_SUBMITTED' && !r.remarks?.includes('Report not submitted')
+  );
+
+  if (valid.length === 0) {
+    const emptyRec: Record<string, number | null> = {};
+    const emptyDel: Record<string, number | null> = {};
+    FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+      emptyRec[cat.key] = null;
+      emptyDel[cat.key] = null;
+    });
+
+    return {
+      srNo,
+      officeName,
+      postmanId,
+      postmanName,
+      isRegisteredPostman,
+      status: 'Report Not Submitted',
+      hasSubmission: false,
+      lastBalance: null,
+      received: emptyRec,
+      receivedTotal: null,
+      delivered: emptyDel,
+      deliveredTotal: null,
+      totalAvailable: null,
+      returnedToSender: null,
+      missent: null,
+      deposit: null,
+      deliveryPercentage: null,
+      submissionCount: 0,
+    };
+  }
+
+  // Sort chronological ascending
+  const sorted = [...valid].sort((a, b) => {
+    const da = normalizeDateToIso(a.date) || a.date;
+    const db = normalizeDateToIso(b.date) || b.date;
+    return da.localeCompare(db);
+  });
+
+  // Opening balance is the lastBalance of the earliest submission in the range
+  const openingLastBal = Number(sorted[0].lastBalance) || 0;
+
+  const recMap: Record<string, number | null> = {};
+  const delMap: Record<string, number | null> = {};
+  FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+    recMap[cat.key] = 0;
+    delMap[cat.key] = 0;
+  });
+
+  let recSum = 0;
+  let delSum = 0;
+  let retSum = 0;
+  let misSum = 0;
+
+  for (const r of sorted) {
+    let dayRec = 0;
+    let dayDel = 0;
+    FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+      const rv = getCategoryCount(r.receivedBreakdown, cat.key);
+      const dv = getCategoryCount(r.deliveredBreakdown, cat.key);
+      (recMap[cat.key] as number) += rv;
+      (delMap[cat.key] as number) += dv;
+      dayRec += rv;
+      dayDel += dv;
+    });
+
+    if (dayRec === 0 && (Number(r.receivedToday) || 0) > 0) {
+      dayRec = Number(r.receivedToday) || 0;
+    }
+    if (dayDel === 0 && (Number(r.delivered) || 0) > 0) {
+      dayDel = Number(r.delivered) || 0;
+    }
+
+    recSum += dayRec;
+    delSum += dayDel;
+    retSum += Number(r.returnedToSender) || 0;
+    misSum += Number(r.missent) || 0;
+  }
+
+  const totalAvail = openingLastBal + recSum;
+  const deposit = totalAvail - delSum - retSum - misSum;
+  const delPct = totalAvail > 0 ? (delSum / totalAvail) * 100 : 0;
+
+  return {
+    srNo,
+    officeName,
+    postmanId,
+    postmanName,
+    isRegisteredPostman,
+    status: 'Submitted',
+    hasSubmission: true,
+    report: sorted[sorted.length - 1],
+    lastBalance: openingLastBal,
+    received: recMap,
+    receivedTotal: recSum,
+    delivered: delMap,
+    deliveredTotal: delSum,
+    totalAvailable: totalAvail,
+    returnedToSender: retSum,
+    missent: misSum,
+    deposit,
+    deliveryPercentage: delPct,
+    submissionCount: sorted.length,
   };
 }
 
@@ -810,6 +987,23 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
         if (!existing.createdDate && po.createdDate) {
           existing.createdDate = po.createdDate;
         }
+        // Preserve and merge postmen so postmen are never lost during deduplication
+        if (Array.isArray(po.postmen) && po.postmen.length > 0) {
+          const exList = Array.isArray(existing.postmen) ? existing.postmen : [];
+          const pmMap = new Map<string, Postman>();
+          exList.forEach((p) => {
+            const k = p.id || (p.name || '').toLowerCase().trim();
+            if (k) pmMap.set(k, { ...p });
+          });
+          po.postmen.forEach((p) => {
+            const k = p.id || (p.name || '').toLowerCase().trim();
+            if (k) {
+              const prev = pmMap.get(k);
+              pmMap.set(k, { ...(prev || {}), ...p });
+            }
+          });
+          existing.postmen = Array.from(pmMap.values());
+        }
       }
       continue;
     }
@@ -837,6 +1031,7 @@ export function cleanAndFilterPostOffices(offices: PostOffice[]): PostOffice[] {
       status: po.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
       initialBalance: initBal >= 0 && initBal < 10000 ? initBal : 0,
       createdDate: po.createdDate ? normalizeDateToIso(po.createdDate) || po.createdDate : undefined,
+      postmen: Array.isArray(po.postmen) ? po.postmen : [],
     });
   }
 

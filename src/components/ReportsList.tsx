@@ -84,6 +84,53 @@ export const ReportsList: React.FC<ReportsListProps> = ({
   // View mode: 'daily-postman' (primary required format) vs 'historical-all'
   const [viewMode, setViewMode] = useState<'daily-postman' | 'historical-all'>('daily-postman');
 
+  // Date selection mode: 'single' vs 'range' (Multi-Date / Date Range)
+  const [dateMode, setDateMode] = useState<'single' | 'range'>('single');
+  const [fromDate, setFromDate] = useState<string>(() => {
+    try {
+      const d = new Date();
+      d.setDate(d.getDate() - 6);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    } catch {
+      return today;
+    }
+  });
+  const [toDate, setToDate] = useState<string>(today);
+
+  const handleSetQuickRange = (preset: 'today' | '3days' | '7days' | '15days' | 'thisMonth') => {
+    const end = today;
+    setToDate(end);
+    const d = new Date();
+    if (preset === 'today') {
+      setFromDate(end);
+    } else if (preset === '3days') {
+      d.setDate(d.getDate() - 2);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      setFromDate(`${y}-${m}-${day}`);
+    } else if (preset === '7days') {
+      d.setDate(d.getDate() - 6);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      setFromDate(`${y}-${m}-${day}`);
+    } else if (preset === '15days') {
+      d.setDate(d.getDate() - 14);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      setFromDate(`${y}-${m}-${day}`);
+    } else if (preset === 'thisMonth') {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      setFromDate(`${y}-${m}-01`);
+    }
+  };
+
   // Filters for Daily Postman Report
   const [filterOffice, setFilterOffice] = useState('');
   const [searchPostman, setSearchPostman] = useState('');
@@ -108,10 +155,13 @@ export const ReportsList: React.FC<ReportsListProps> = ({
     return Array.from(names).sort();
   }, [validOffices, validReports]);
 
-  // Build the comprehensive Daily Postman Article Report Data for the active date
+  // Build the comprehensive Daily Postman Article Report Data for the active date or date range
   const rawReportData: DailyPostmanArticleReportData = useMemo(() => {
+    if (dateMode === 'range') {
+      return buildDailyPostmanArticleReport(validReports, validOffices, fromDate, toDate);
+    }
     return buildDailyPostmanArticleReport(validReports, validOffices, activeDate);
-  }, [validReports, validOffices, activeDate]);
+  }, [validReports, validOffices, dateMode, activeDate, fromDate, toDate]);
 
   // Filter the report data according to user role and UI filters
   const filteredReportData: DailyPostmanArticleReportData = useMemo(() => {
@@ -261,12 +311,16 @@ export const ReportsList: React.FC<ReportsListProps> = ({
     }
 
     return {
-      reportDate: activeDate,
+      reportDate: rawReportData.reportDate,
+      startDate: rawReportData.startDate,
+      endDate: rawReportData.endDate,
+      isDateRange: rawReportData.isDateRange,
+      totalDaysInRange: rawReportData.totalDaysInRange,
       officeGroups: filteredGroups,
       allRows: allFilteredRows,
       grandTotals,
     };
-  }, [rawReportData, userOffice, filterOffice, searchPostman, filterStatus, activeDate]);
+  }, [rawReportData, userOffice, filterOffice, searchPostman, filterStatus]);
 
   // Date step helper (Previous / Next Day)
   const handleStepDate = (direction: 'prev' | 'next') => {
@@ -291,10 +345,10 @@ export const ReportsList: React.FC<ReportsListProps> = ({
 
   // Export handlers
   const handleExportExcel = () => {
-    exportDailyPostmanArticleReportToExcel(
-      filteredReportData,
-      `Pakistan_Post_Daily_Postman_Article_Report_${activeDate}`
-    );
+    const exportName = dateMode === 'range'
+      ? `Pakistan_Post_Postman_Article_Report_${fromDate}_to_${toDate}`
+      : `Pakistan_Post_Daily_Postman_Article_Report_${activeDate}`;
+    exportDailyPostmanArticleReportToExcel(filteredReportData, exportName);
   };
 
   const handlePrintA4Landscape = () => {
@@ -380,66 +434,176 @@ export const ReportsList: React.FC<ReportsListProps> = ({
           </div>
         </div>
 
-        {/* Date Selector Banner & Quick Buttons */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <span className="text-xs font-bold text-gray-700 uppercase">Selected Date:</span>
-            <div className="flex items-center space-x-1">
+        {/* Date Mode Switcher: Single Date vs Date Range */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-gray-100 pb-2.5">
+          <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setDateMode('single')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center space-x-1.5 ${
+                dateMode === 'single'
+                  ? 'bg-white text-gray-900 shadow-2xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-[#006633]" />
+              <span>Single Date (ایک تاریخ)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDateMode('range')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center space-x-1.5 ${
+                dateMode === 'range'
+                  ? 'bg-[#006633] text-white shadow-2xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 text-yellow-300" />
+              <span>Date Range / Multi-Date (مختلف تواریخ کا مجموعہ)</span>
+            </button>
+          </div>
+
+          {dateMode === 'range' && (
+            <div className="flex flex-wrap items-center gap-1 text-[11px]">
+              <span className="text-gray-500 font-bold uppercase text-[10px] mr-1">Quick Range:</span>
               <button
                 type="button"
-                onClick={() => handleStepDate('prev')}
-                className="p-1.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-gray-700 transition-colors cursor-pointer"
-                title="Previous Day"
+                onClick={() => handleSetQuickRange('today')}
+                className="px-2 py-1 bg-white hover:bg-gray-100 border border-gray-300 rounded font-bold text-gray-700 cursor-pointer"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                Today
               </button>
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('3days')}
+                className="px-2 py-1 bg-white hover:bg-gray-100 border border-gray-300 rounded font-bold text-gray-700 cursor-pointer"
+              >
+                Last 3 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('7days')}
+                className="px-2 py-1 bg-white hover:bg-gray-100 border border-gray-300 rounded font-bold text-gray-700 cursor-pointer"
+              >
+                Last 7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('15days')}
+                className="px-2 py-1 bg-white hover:bg-gray-100 border border-gray-300 rounded font-bold text-gray-700 cursor-pointer"
+              >
+                Last 15 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('thisMonth')}
+                className="px-2 py-1 bg-white hover:bg-gray-100 border border-gray-300 rounded font-bold text-gray-700 cursor-pointer"
+              >
+                This Month
+              </button>
+            </div>
+          )}
+        </div>
 
+        {/* Date Selector Banner: Single Date vs Multi-Date Range */}
+        {dateMode === 'single' ? (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-gray-700 uppercase">Selected Date:</span>
+              <div className="flex items-center space-x-1">
+                <button
+                  type="button"
+                  onClick={() => handleStepDate('prev')}
+                  className="p-1.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-gray-700 transition-colors cursor-pointer"
+                  title="Previous Day"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+
+                <input
+                  type="date"
+                  value={activeDate}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="bg-white text-gray-900 text-xs font-bold px-3 py-1.5 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#006633]"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => handleStepDate('next')}
+                  className="p-1.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-gray-700 transition-colors cursor-pointer"
+                  title="Next Day"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {!isToday && (
+                <button
+                  type="button"
+                  onClick={() => setDate(today)}
+                  className="text-[11px] bg-[#006633] text-white hover:bg-[#00401A] px-2.5 py-1.5 rounded font-bold transition-colors cursor-pointer"
+                >
+                  Go to Today
+                </button>
+              )}
+
+              {isSun && (
+                <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-1 rounded">
+                  Sunday Holiday
+                </span>
+              )}
+              {isHol && (
+                <span className="bg-purple-100 text-purple-900 border border-purple-300 text-[10px] font-black px-2 py-1 rounded">
+                  {holReason || 'Public Holiday'} (Closed)
+                </span>
+              )}
+            </div>
+
+            <div className="text-xs text-gray-600 font-medium">
+              Report Date:{' '}
+              <strong className="text-gray-950 font-mono font-bold">
+                {formatDatePK(activeDate)}
+              </strong>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-emerald-950 uppercase flex items-center space-x-1">
+                <Calendar className="w-3.5 h-3.5 text-[#006633]" />
+                <span>From Date:</span>
+              </span>
               <input
                 type="date"
-                value={activeDate}
-                onChange={(e) => setDate(e.target.value)}
+                value={fromDate}
+                max={toDate}
+                onChange={(e) => setFromDate(e.target.value)}
                 className="bg-white text-gray-900 text-xs font-bold px-3 py-1.5 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#006633]"
               />
 
-              <button
-                type="button"
-                onClick={() => handleStepDate('next')}
-                className="p-1.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-gray-700 transition-colors cursor-pointer"
-                title="Next Day"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <span className="text-xs font-bold text-emerald-950 uppercase">To Date:</span>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate}
+                max={today}
+                onChange={(e) => setToDate(e.target.value)}
+                className="bg-white text-gray-900 text-xs font-bold px-3 py-1.5 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#006633]"
+              />
+
+              <span className="bg-[#00401A] text-yellow-300 text-[10px] font-black px-2.5 py-1 rounded">
+                {filteredReportData.totalDaysInRange || 1} Days Consolidated
+              </span>
             </div>
 
-            {!isToday && (
-              <button
-                type="button"
-                onClick={() => setDate(today)}
-                className="text-[11px] bg-[#006633] text-white hover:bg-[#00401A] px-2.5 py-1.5 rounded font-bold transition-colors cursor-pointer"
-              >
-                Go to Today
-              </button>
-            )}
-
-            {isSun && (
-              <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-1 rounded">
-                Sunday Holiday
-              </span>
-            )}
-            {isHol && (
-              <span className="bg-purple-100 text-purple-900 border border-purple-300 text-[10px] font-black px-2 py-1 rounded">
-                {holReason || 'Public Holiday'} (Closed)
-              </span>
-            )}
+            <div className="text-xs text-emerald-900 font-medium">
+              Consolidated Range:{' '}
+              <strong className="text-gray-950 font-mono font-bold">
+                {formatDatePK(fromDate)} — {formatDatePK(toDate)}
+              </strong>
+            </div>
           </div>
-
-          <div className="text-xs text-gray-600 font-medium">
-            Report Date:{' '}
-            <strong className="text-gray-950 font-mono font-bold">
-              {formatDatePK(activeDate)}
-            </strong>
-          </div>
-        </div>
+        )}
 
         {/* Filter Controls Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2 text-xs pt-1">
@@ -810,7 +974,11 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                               {row.status === 'Submitted' && (
                                 <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-[#006633] border border-green-200">
                                   <CheckCircle2 className="w-3 h-3" />
-                                  <span>Submitted</span>
+                                  <span>
+                                    {filteredReportData.isDateRange && row.submissionCount !== undefined
+                                      ? `${row.submissionCount}/${filteredReportData.totalDaysInRange || 1} Days`
+                                      : 'Submitted'}
+                                  </span>
                                 </span>
                               )}
                               {row.status === 'Report Not Submitted' && (
