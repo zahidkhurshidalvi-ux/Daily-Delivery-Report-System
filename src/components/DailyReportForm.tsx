@@ -490,8 +490,8 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       if (!isEdit) {
         setReceivedByCategory({});
         setDeliveredByCategory({});
-        setReturnedToSender('0');
-        setMissent('0');
+        setReturnedToSender('');
+        setMissent('');
         setDeposit('');
         setEmttsUpdated('');
         setEmttsNotUpdatedManual(null);
@@ -624,7 +624,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
             3
           </div>
           <div>
-            <span className="block text-[11px] font-bold">Step 3: Outcomes & EMTTS</span>
+            <span className="block text-[11px] font-bold">Step 3: Dispositions & Balances</span>
             <span className="text-[10px] opacity-80 block truncate">
               Deposit: {formatNumber(numDeposit)} • Bal: {formatNumber(calculatedClosingBal)}
             </span>
@@ -1047,7 +1047,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
                 type="submit"
                 className="bg-[#006633] hover:bg-[#004d26] text-white text-xs font-extrabold px-6 py-2.5 rounded-lg transition-all shadow-xs flex items-center space-x-2 cursor-pointer"
               >
-                <span>Next: Step 3 - Outcomes & EMTTS (اگلا: واپسی و EMTTS)</span>
+                <span>Next: Step 3 - Dispositions & Balances (اگلا: واپسی، مسنٹ و ڈیپازٹ)</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1056,7 +1056,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* STEP 3: OUTCOMES & EMTTS (واپسی، مسنٹ، ڈیپازٹ اور EMTTS) */}
+      {/* STEP 3: DISPOSITIONS & BALANCES (واپسی، مسنٹ اور ڈیپازٹ ڈاک) */}
       {/* ======================================================== */}
       {currentStep === 3 && (
         <div className="space-y-6">
@@ -1130,83 +1130,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
                 </span>
               </div>
             </div>
-          </div>
-
-          {/* Section 3B: EMTTS Status (Updated vs Not Updated) */}
-          <div className="bg-blue-50/40 border border-blue-200 rounded-xl p-5 shadow-xs text-xs">
-            <div className="flex items-center space-x-2 mb-1">
-              <ShieldCheck className="w-4 h-4 text-blue-700" />
-              <h3 className="font-black text-sm text-gray-900">
-                Pakistan Post EMTTS Status (ٹریک اینڈ ٹریس سسٹم اپ ڈیٹ اسٹیٹس)
-              </h3>
-            </div>
-            <p className="text-[11px] text-gray-500 mb-4">
-              (ایکسپریس میل ٹریک اینڈ ٹریس سسٹم پر بارکوڈ آرٹیکلز کی اپ ڈیٹ کی تعداد درج کریں)
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Updated on EMTTS */}
-              <div className="bg-white border border-blue-300 p-3.5 rounded-lg shadow-2xs">
-                <label className="block font-bold text-blue-950 mb-1">
-                  Updated on EMTTS (No. of articles — سسٹم پر اپ ڈیٹ شدہ ڈاک) *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder={String(totalEmttsTrackableProcessed || totalDelivered)}
-                  value={emttsUpdated}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setEmttsUpdated(val);
-                    if (emttsNotUpdatedManual === null) {
-                      const num = parseInt(val, 10) || 0;
-                      const base = totalEmttsTrackableProcessed || totalDelivered;
-                      // auto update
-                    }
-                  }}
-                  className="w-full bg-white border border-gray-300 text-gray-900 text-sm font-black rounded-lg p-2 focus:ring-2 focus:ring-[#006633] font-mono"
-                />
-                <span className="text-[10px] text-gray-500 mt-1 block">
-                  Trackable delivered: {totalEmttsTrackableProcessed} articles
-                </span>
-              </div>
-
-              {/* Not Updated on EMTTS (Auto) */}
-              <div className="bg-white border border-amber-300 p-3.5 rounded-lg shadow-2xs">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-amber-950">
-                    Not Updated on EMTTS (No. of articles — غیر اپ ڈیٹ شدہ ڈاک)
-                  </label>
-                  <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-bold uppercase">
-                    Auto-Math
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  value={finalEmttsNotUpdated}
-                  onChange={(e) => setEmttsNotUpdatedManual(e.target.value)}
-                  className="w-full bg-white border border-gray-300 text-gray-900 text-sm font-black rounded-lg p-2 focus:ring-2 focus:ring-[#006633] font-mono"
-                />
-                <span className="text-[10px] text-amber-700 mt-1 block">
-                  Auto remaining: {autoEmttsNotUpdated} articles pending in EMTTS
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Remarks */}
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              Remarks / Explanatory Notes (کیفیت یا نوٹس)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Normal Delivery, Beat 2 road construction delay, etc."
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              className="w-full bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-[#006633]"
-            />
           </div>
 
           {/* Closing Balance Summary Banner */}
@@ -1379,39 +1302,22 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
                 </table>
               </div>
 
-              {/* Outcomes & EMTTS Summary */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-1.5">
-                  <h4 className="font-bold text-gray-900 text-xs">Dispositions</h4>
-                  <div className="flex justify-between">
+              {/* Dispositions Summary */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-2">
+                <h4 className="font-bold text-gray-900 text-xs">Dispositions &amp; Balances</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-white p-2.5 rounded border border-gray-200 flex justify-between items-center">
                     <span className="text-gray-600">Returned to Sender:</span>
                     <strong className="font-mono text-red-700">{formatNumber(numReturned)}</strong>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Missent:</span>
+                  <div className="bg-white p-2.5 rounded border border-gray-200 flex justify-between items-center">
+                    <span className="text-gray-600">Missent Articles:</span>
                     <strong className="font-mono text-amber-700">{formatNumber(numMissent)}</strong>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="bg-white p-2.5 rounded border border-gray-200 flex justify-between items-center">
                     <span className="text-gray-600">Deposit / Undelivered:</span>
                     <strong className="font-mono text-blue-700">{formatNumber(numDeposit)}</strong>
                   </div>
-                </div>
-
-                <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-200 space-y-1.5">
-                  <h4 className="font-bold text-blue-950 text-xs">EMTTS System Synchronization</h4>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Updated on EMTTS:</span>
-                    <strong className="font-mono text-blue-900">{formatNumber(numEmttsUpdated)}</strong>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Not Updated on EMTTS:</span>
-                    <strong className="font-mono text-amber-800">{formatNumber(finalEmttsNotUpdated)}</strong>
-                  </div>
-                  {remarks && (
-                    <div className="pt-1 text-[11px] text-gray-500 italic">
-                      Remarks: "{remarks}"
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
