@@ -168,95 +168,29 @@ export const ReportsList: React.FC<ReportsListProps> = ({
     const effectiveOffice = userOffice || filterOffice;
     const searchLower = searchPostman.toLowerCase().trim();
 
-    let filteredGroups: OfficeReportGroup[] = rawReportData.officeGroups;
-
-    if (effectiveOffice) {
-      filteredGroups = filteredGroups.filter(
-        (g) => g.officeName.toLowerCase() === effectiveOffice.toLowerCase()
-      );
-    }
-
-    // Filter postman rows inside groups
-    filteredGroups = filteredGroups
-      .map((group) => {
-        const matchingRows = group.postmanRows.filter((pm) => {
-          if (filterStatus !== 'ALL' && pm.status !== filterStatus) {
-            return false;
-          }
-          if (searchLower) {
-            const matchName = pm.postmanName.toLowerCase().includes(searchLower);
-            const matchOffice = pm.officeName.toLowerCase().includes(searchLower);
-            if (!matchName && !matchOffice) return false;
-          }
-          return true;
-        });
-
-        // Recalculate group totals for the filtered set of rows
-        let subCount = 0;
-        let notSubCount = 0;
-        let incCount = 0;
-
-        const totals = {
-          lastBalance: 0,
-          receivedByCategory: {} as Record<string, number>,
-          receivedTotal: 0,
-          deliveredByCategory: {} as Record<string, number>,
-          deliveredTotal: 0,
-          totalAvailable: 0,
-          returnedToSender: 0,
-          missent: 0,
-          deposit: 0,
-          deliveryPercentage: null as number | null,
-        };
-
-        FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
-          totals.receivedByCategory[cat.key] = 0;
-          totals.deliveredByCategory[cat.key] = 0;
-        });
-
-        for (const row of matchingRows) {
-          if (row.status === 'Submitted') subCount++;
-          else if (row.status === 'Incomplete') incCount++;
-          else notSubCount++;
-
-          if (row.hasSubmission) {
-            totals.lastBalance += row.lastBalance || 0;
-            totals.receivedTotal += row.receivedTotal || 0;
-            totals.deliveredTotal += row.deliveredTotal || 0;
-            totals.totalAvailable += row.totalAvailable || 0;
-            totals.returnedToSender += row.returnedToSender || 0;
-            totals.missent += row.missent || 0;
-            totals.deposit += row.deposit || 0;
-
-            FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
-              totals.receivedByCategory[cat.key] += row.received[cat.key] || 0;
-              totals.deliveredByCategory[cat.key] += row.delivered[cat.key] || 0;
-            });
-          }
+    const matchingRows = rawReportData.allRows
+      .filter((row) => {
+        if (effectiveOffice && row.officeName.toLowerCase() !== effectiveOffice.toLowerCase()) {
+          return false;
         }
-
-        const compRate = matchingRows.length > 0 ? (subCount / matchingRows.length) * 100 : 0;
-        if (totals.totalAvailable > 0) {
-          totals.deliveryPercentage = (totals.deliveredTotal / totals.totalAvailable) * 100;
+        if (filterStatus !== 'ALL' && row.status !== filterStatus) {
+          return false;
         }
-
-        return {
-          ...group,
-          postmanRows: matchingRows,
-          totalRegisteredPostmen: matchingRows.length,
-          submittedCount: subCount,
-          notSubmittedCount: notSubCount,
-          incompleteCount: incCount,
-          completionRate: compRate,
-          totals,
-        };
+        if (searchLower) {
+          const matchOffice = row.officeName.toLowerCase().includes(searchLower);
+          if (!matchOffice) return false;
+        }
+        return true;
       })
-      .filter((g) => g.postmanRows.length > 0);
+      .map((row, idx) => ({
+        ...row,
+        srNo: idx + 1,
+      }));
 
-    // Calculate Grand Totals across all filtered groups
+    // Calculate Grand Totals across all filtered office rows
     const grandTotals = {
-      totalOffices: filteredGroups.length,
-      totalRegisteredPostmen: 0,
+      totalOffices: matchingRows.length,
+      totalRegisteredPostmen: matchingRows.length,
       submittedCount: 0,
       notSubmittedCount: 0,
       incompleteCount: 0,
@@ -278,36 +212,32 @@ export const ReportsList: React.FC<ReportsListProps> = ({
       grandTotals.deliveredByCategory[cat.key] = 0;
     });
 
-    const allFilteredRows: PostmanReportRow[] = [];
+    for (const row of matchingRows) {
+      if (row.status === 'Submitted') grandTotals.submittedCount++;
+      else if (row.status === 'Incomplete') grandTotals.incompleteCount++;
+      else grandTotals.notSubmittedCount++;
 
-    for (const group of filteredGroups) {
-      allFilteredRows.push(...group.postmanRows);
-      grandTotals.totalRegisteredPostmen += group.totalRegisteredPostmen;
-      grandTotals.submittedCount += group.submittedCount;
-      grandTotals.notSubmittedCount += group.notSubmittedCount;
-      grandTotals.incompleteCount += group.incompleteCount;
+      if (row.hasSubmission) {
+        grandTotals.lastBalance += row.lastBalance || 0;
+        grandTotals.receivedTotal += row.receivedTotal || 0;
+        grandTotals.deliveredTotal += row.deliveredTotal || 0;
+        grandTotals.totalAvailable += row.totalAvailable || 0;
+        grandTotals.returnedToSender += row.returnedToSender || 0;
+        grandTotals.missent += row.missent || 0;
+        grandTotals.deposit += row.deposit || 0;
 
-      grandTotals.lastBalance += group.totals.lastBalance;
-      grandTotals.receivedTotal += group.totals.receivedTotal;
-      grandTotals.deliveredTotal += group.totals.deliveredTotal;
-      grandTotals.totalAvailable += group.totals.totalAvailable;
-      grandTotals.returnedToSender += group.totals.returnedToSender;
-      grandTotals.missent += group.totals.missent;
-      grandTotals.deposit += group.totals.deposit;
-
-      FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
-        grandTotals.receivedByCategory[cat.key] += group.totals.receivedByCategory[cat.key] || 0;
-        grandTotals.deliveredByCategory[cat.key] += group.totals.deliveredByCategory[cat.key] || 0;
-      });
+        FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
+          grandTotals.receivedByCategory[cat.key] += (row.received[cat.key] as number) || 0;
+          grandTotals.deliveredByCategory[cat.key] += (row.delivered[cat.key] as number) || 0;
+        });
+      }
     }
 
-    if (grandTotals.totalRegisteredPostmen > 0) {
-      grandTotals.completionRate =
-        (grandTotals.submittedCount / grandTotals.totalRegisteredPostmen) * 100;
+    if (matchingRows.length > 0) {
+      grandTotals.completionRate = (grandTotals.submittedCount / matchingRows.length) * 100;
     }
     if (grandTotals.totalAvailable > 0) {
-      grandTotals.deliveryPercentage =
-        (grandTotals.deliveredTotal / grandTotals.totalAvailable) * 100;
+      grandTotals.deliveryPercentage = (grandTotals.deliveredTotal / grandTotals.totalAvailable) * 100;
     }
 
     return {
@@ -316,8 +246,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({
       endDate: rawReportData.endDate,
       isDateRange: rawReportData.isDateRange,
       totalDaysInRange: rawReportData.totalDaysInRange,
-      officeGroups: filteredGroups,
-      allRows: allFilteredRows,
+      officeGroups: [],
+      allRows: matchingRows,
       grandTotals,
     };
   }, [rawReportData, userOffice, filterOffice, searchPostman, filterStatus]);
@@ -346,8 +276,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({
   // Export handlers
   const handleExportExcel = () => {
     const exportName = dateMode === 'range'
-      ? `Pakistan_Post_Postman_Article_Report_${fromDate}_to_${toDate}`
-      : `Pakistan_Post_Daily_Postman_Article_Report_${activeDate}`;
+      ? `Pakistan_Post_Office_Article_Report_${fromDate}_to_${toDate}`
+      : `Pakistan_Post_Daily_Office_Article_Report_${activeDate}`;
     exportDailyPostmanArticleReportToExcel(filteredReportData, exportName);
   };
 
@@ -366,7 +296,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
   return (
     <div className="space-y-4">
       {/* ========================================================================= */}
-      {/* MAIN HEADER: DAILY POSTMAN ARTICLE REPORT                                */}
+      {/* MAIN HEADER: DAILY POST OFFICE ARTICLE REPORT                             */}
       {/* ========================================================================= */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-4">
         {/* Title Bar & Quick Actions */}
@@ -380,10 +310,10 @@ export const ReportsList: React.FC<ReportsListProps> = ({
             </div>
             <h1 className="text-lg sm:text-xl font-black text-gray-950 uppercase tracking-tight mt-1 flex items-center space-x-2">
               <FileSpreadsheet className="w-5 h-5 text-[#006633]" />
-              <span>DAILY POSTMAN ARTICLE REPORT</span>
+              <span>DAILY POST OFFICE ARTICLE REPORT</span>
             </h1>
             <p className="text-xs text-gray-500 font-semibold tracking-wide uppercase mt-0.5">
-              Office Wise &amp; Postman Wise
+              Office Wise Daily Article Delivery Summary
             </p>
           </div>
 
@@ -630,16 +560,16 @@ export const ReportsList: React.FC<ReportsListProps> = ({
             </div>
           </div>
 
-          {/* Search Postman */}
+          {/* Search Post Office */}
           <div className="lg:col-span-4">
             <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
-              Search Postman / Office
+              Search Post Office
             </label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Type postman name or office..."
+                placeholder="Type office name..."
                 value={searchPostman}
                 onChange={(e) => setSearchPostman(e.target.value)}
                 className="w-full bg-white text-gray-900 text-xs font-medium pl-8 pr-3 py-1.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#006633]"
@@ -688,10 +618,10 @@ export const ReportsList: React.FC<ReportsListProps> = ({
           <div className="flex items-center space-x-2">
             <Building2 className="w-4 h-4 text-emerald-300" />
             <h2 className="font-extrabold text-sm uppercase tracking-wide text-white">
-              {filterOffice ? `${filterOffice} — Postman Article Summary` : 'Gujranwala Division — Article Performance'}
+              {filterOffice ? `${filterOffice} — Article Summary` : 'Gujranwala Division — Article Performance'}
             </h2>
             <span className="bg-emerald-800 text-yellow-300 text-[10px] font-black px-2 py-0.5 rounded font-mono">
-              {filteredReportData.grandTotals.totalOffices} Offices • {filteredReportData.grandTotals.totalRegisteredPostmen} Postmen
+              {filteredReportData.grandTotals.totalOffices} Offices
             </span>
           </div>
 
@@ -699,7 +629,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
             <span className="text-emerald-200">
               Submitted:{' '}
               <strong className="text-white font-mono">
-                {filteredReportData.grandTotals.submittedCount} / {filteredReportData.grandTotals.totalRegisteredPostmen}
+                {filteredReportData.grandTotals.submittedCount} / {filteredReportData.grandTotals.totalOffices}
               </strong>{' '}
               ({filteredReportData.grandTotals.completionRate.toFixed(1)}%)
             </span>
@@ -756,10 +686,10 @@ export const ReportsList: React.FC<ReportsListProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 31-COLUMN DAILY POSTMAN ARTICLE REPORT TABLE                              */}
+      {/* 30-COLUMN DAILY POST OFFICE ARTICLE REPORT TABLE                          */}
       {/* ========================================================================= */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-        {filteredReportData.officeGroups.length > 0 ? (
+        {filteredReportData.allRows.length > 0 ? (
           <div className="overflow-x-auto max-h-[750px] relative">
             <table className="w-full text-left text-xs border-collapse">
               {/* Table Head: 2-Tier Header Structure */}
@@ -769,11 +699,8 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                   <th rowSpan={2} className="p-2 border-r border-[#005522] text-center w-8">
                     Sr
                   </th>
-                  <th rowSpan={2} className="p-2 border-r border-[#005522] min-w-[130px]">
+                  <th rowSpan={2} className="p-2 border-r border-[#005522] min-w-[150px]">
                     Office Name
-                  </th>
-                  <th rowSpan={2} className="p-2 border-r border-[#005522] min-w-[130px]">
-                    Postman Name
                   </th>
                   <th rowSpan={2} className="p-2 border-r border-[#005522] text-right min-w-[65px]">
                     Last Bal
@@ -834,314 +761,204 @@ export const ReportsList: React.FC<ReportsListProps> = ({
                 </tr>
               </thead>
 
-              {/* Table Body: Grouped by Office */}
+              {/* Table Body: Direct Office Rows (No postman sub-breakdown or office subtotal) */}
               <tbody className="divide-y divide-gray-200 text-gray-800 font-medium">
-                {filteredReportData.officeGroups.map((group, groupIdx) => {
+                {filteredReportData.allRows.map((row) => {
+                  const isSub = row.hasSubmission;
+                  const canEdit = isSub && row.report && (isAdmin || row.report.date === today);
+                  const pctStr =
+                    row.deliveryPercentage !== null ? `${row.deliveryPercentage.toFixed(1)}%` : '-';
+
+                  const valCell = (v: number | null | undefined) =>
+                    isSub && v !== null && v !== undefined ? (
+                      <span className="font-mono">{formatNumber(v)}</span>
+                    ) : (
+                      <span className="text-gray-300 select-none">—</span>
+                    );
+
                   return (
-                    <React.Fragment key={`group-${group.officeName}-${groupIdx}`}>
-                      {/* Office Group Header Row */}
-                      <tr className="bg-slate-100 border-t-2 border-b border-slate-300 font-bold text-gray-900 sticky z-10">
-                        <td colSpan={32} className="p-2 sm:px-3 text-xs">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center space-x-2">
-                              <Building2 className="w-4 h-4 text-[#006633]" />
-                              <span className="font-extrabold text-gray-900 uppercase tracking-tight text-xs">
-                                {group.officeName}
-                              </span>
-                              {group.office.postmasterName && (
-                                <span className="text-[10px] text-gray-500 font-normal">
-                                  • Incharge: <strong className="text-gray-700">{group.office.postmasterName}</strong>
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-3 text-[11px]">
-                              <span className="text-gray-600">
-                                Roster:{' '}
-                                <strong className="text-gray-900 font-mono">
-                                  {group.totalRegisteredPostmen}
-                                </strong>{' '}
-                                Postmen
-                              </span>
-                              <span className="text-[#006633]">
-                                Submitted:{' '}
-                                <strong className="font-mono">
-                                  {group.submittedCount} / {group.totalRegisteredPostmen}
-                                </strong>{' '}
-                                ({group.completionRate.toFixed(0)}%)
-                              </span>
-                            </div>
-                          </div>
+                    <tr
+                      key={`office-row-${row.officeName}-${row.srNo}`}
+                      className={`hover:bg-amber-50/40 transition-colors ${
+                        !isSub ? 'bg-red-50/20' : ''
+                      }`}
+                    >
+                      <td className="p-2 text-center text-gray-500 font-mono text-[11px] border-r border-gray-100">
+                        {row.srNo}
+                      </td>
+                      <td className="p-2 font-bold text-gray-900 border-r border-gray-100 whitespace-nowrap">
+                        {row.officeName}
+                      </td>
+                      <td className="p-2 text-right border-r border-gray-100 font-mono text-gray-600">
+                        {valCell(row.lastBalance)}
+                      </td>
+
+                      {/* 10 Received Categories */}
+                      {FINAL_ARTICLE_CATEGORIES.map((cat) => (
+                        <td
+                          key={`r-${cat.key}-${row.srNo}`}
+                          className="p-1.5 text-right border-r border-gray-100 font-mono text-gray-700"
+                        >
+                          {valCell(row.received[cat.key])}
                         </td>
-                      </tr>
+                      ))}
+                      {/* Received Total */}
+                      <td className="p-1.5 text-right border-r border-gray-200 font-mono font-bold text-[#006633] bg-emerald-50/40">
+                        {valCell(row.receivedTotal)}
+                      </td>
 
-                      {/* Postman Rows */}
-                      {group.postmanRows.map((row) => {
-                        const isSub = row.hasSubmission;
-                        const canEdit = isSub && row.report && (isAdmin || row.report.date === today);
-                        const pctStr =
-                          row.deliveryPercentage !== null ? `${row.deliveryPercentage.toFixed(1)}%` : '-';
+                      {/* 10 Delivered Categories */}
+                      {FINAL_ARTICLE_CATEGORIES.map((cat) => (
+                        <td
+                          key={`d-${cat.key}-${row.srNo}`}
+                          className="p-1.5 text-right border-r border-gray-100 font-mono text-gray-700"
+                        >
+                          {valCell(row.delivered[cat.key])}
+                        </td>
+                      ))}
+                      {/* Delivered Total */}
+                      <td className="p-1.5 text-right border-r border-gray-200 font-mono font-bold text-emerald-800 bg-teal-50/40">
+                        {valCell(row.deliveredTotal)}
+                      </td>
 
-                        const valCell = (v: number | null | undefined) =>
-                          isSub && v !== null && v !== undefined ? (
-                            <span className="font-mono">{formatNumber(v)}</span>
-                          ) : (
-                            <span className="text-gray-300 select-none">—</span>
-                          );
+                      {/* Returned, Missent, Deposit */}
+                      <td className="p-1.5 text-right border-r border-gray-100 font-mono text-red-600">
+                        {valCell(row.returnedToSender)}
+                      </td>
+                      <td className="p-1.5 text-right border-r border-gray-100 font-mono text-amber-600">
+                        {valCell(row.missent)}
+                      </td>
+                      <td className="p-1.5 text-right border-r border-gray-100 font-mono text-blue-700 font-semibold">
+                        {valCell(row.deposit)}
+                      </td>
 
-                        return (
-                          <tr
-                            key={`pm-row-${group.officeName}-${row.postmanName}-${row.srNo}`}
-                            className={`hover:bg-amber-50/40 transition-colors ${
-                              !isSub ? 'bg-red-50/20' : ''
+                      {/* Delivery % */}
+                      <td className="p-1.5 text-right border-r border-gray-100 font-mono font-black text-xs">
+                        {isSub && row.deliveryPercentage !== null ? (
+                          <span
+                            className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${
+                              row.deliveryPercentage >= 90
+                                ? 'bg-green-100 text-[#006633]'
+                                : row.deliveryPercentage >= 70
+                                ? 'bg-yellow-100 text-amber-800'
+                                : 'bg-red-100 text-red-700'
                             }`}
                           >
-                            <td className="p-2 text-center text-gray-500 font-mono text-[11px] border-r border-gray-100">
-                              {row.srNo}
-                            </td>
-                            <td className="p-2 font-bold text-gray-900 border-r border-gray-100">
-                              {row.officeName}
-                            </td>
-                            <td className="p-2 border-r border-gray-100">
-                              <span className="font-extrabold text-gray-900">{row.postmanName}</span>
-                              {!row.isRegisteredPostman && (
-                                <span className="block text-[9px] text-gray-400 italic">Office General</span>
-                              )}
-                            </td>
-                            <td className="p-2 text-right border-r border-gray-100 font-mono text-gray-600">
-                              {valCell(row.lastBalance)}
-                            </td>
+                            {pctStr}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 select-none">—</span>
+                        )}
+                      </td>
 
-                            {/* 10 Received Categories */}
-                            {FINAL_ARTICLE_CATEGORIES.map((cat) => (
-                              <td
-                                key={`r-${cat.key}-${row.srNo}`}
-                                className="p-1.5 text-right border-r border-gray-100 font-mono text-gray-700"
+                      {/* Report Status */}
+                      <td className="p-1.5 text-center border-r border-gray-100 whitespace-nowrap">
+                        {row.status === 'Submitted' && (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-[#006633] border border-green-200">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>
+                              {filteredReportData.isDateRange && row.submissionCount !== undefined
+                                ? `${row.submissionCount}/${filteredReportData.totalDaysInRange || 1} Days`
+                                : 'Submitted'}
+                            </span>
+                          </span>
+                        )}
+                        {row.status === 'Report Not Submitted' && (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Not Submitted</span>
+                          </span>
+                        )}
+                        {row.status === 'Incomplete' && (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <HelpCircle className="w-3 h-3" />
+                            <span>Incomplete</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Action Buttons */}
+                      <td className="p-1.5 text-center whitespace-nowrap no-print">
+                        <div className="flex items-center justify-center space-x-1">
+                          {isSub && row.report ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setViewingReport(row.report!)}
+                                className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 transition-colors cursor-pointer"
+                                title="View Breakdown Details"
                               >
-                                {valCell(row.received[cat.key])}
-                              </td>
-                            ))}
-                            {/* Received Total */}
-                            <td className="p-1.5 text-right border-r border-gray-200 font-mono font-bold text-[#006633] bg-emerald-50/40">
-                              {valCell(row.receivedTotal)}
-                            </td>
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
 
-                            {/* 10 Delivered Categories */}
-                            {FINAL_ARTICLE_CATEGORIES.map((cat) => (
-                              <td
-                                key={`d-${cat.key}-${row.srNo}`}
-                                className="p-1.5 text-right border-r border-gray-100 font-mono text-gray-700"
-                              >
-                                {valCell(row.delivered[cat.key])}
-                              </td>
-                            ))}
-                            {/* Delivered Total */}
-                            <td className="p-1.5 text-right border-r border-gray-200 font-mono font-bold text-emerald-800 bg-teal-50/40">
-                              {valCell(row.deliveredTotal)}
-                            </td>
-
-                            {/* Returned, Missent, Deposit */}
-                            <td className="p-1.5 text-right border-r border-gray-100 font-mono text-red-600">
-                              {valCell(row.returnedToSender)}
-                            </td>
-                            <td className="p-1.5 text-right border-r border-gray-100 font-mono text-amber-600">
-                              {valCell(row.missent)}
-                            </td>
-                            <td className="p-1.5 text-right border-r border-gray-100 font-mono text-blue-700 font-semibold">
-                              {valCell(row.deposit)}
-                            </td>
-
-                            {/* Delivery % */}
-                            <td className="p-1.5 text-right border-r border-gray-100 font-mono font-black text-xs">
-                              {isSub && row.deliveryPercentage !== null ? (
-                                <span
-                                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${
-                                    row.deliveryPercentage >= 90
-                                      ? 'bg-green-100 text-[#006633]'
-                                      : row.deliveryPercentage >= 70
-                                      ? 'bg-yellow-100 text-amber-800'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}
+                              {canEdit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onEditReport(row.report!)}
+                                  className="p-1.5 bg-gray-100 hover:bg-amber-100 text-amber-800 rounded border border-gray-200 transition-colors cursor-pointer"
+                                  title="Edit Report"
                                 >
-                                  {pctStr}
-                                </span>
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
                               ) : (
-                                <span className="text-gray-300 select-none">—</span>
+                                <span className="text-[10px] text-gray-400 italic">Locked</span>
                               )}
-                            </td>
 
-                            {/* Report Status */}
-                            <td className="p-1.5 text-center border-r border-gray-100 whitespace-nowrap">
-                              {row.status === 'Submitted' && (
-                                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-[#006633] border border-green-200">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>
-                                    {filteredReportData.isDateRange && row.submissionCount !== undefined
-                                      ? `${row.submissionCount}/${filteredReportData.totalDaysInRange || 1} Days`
-                                      : 'Submitted'}
-                                  </span>
-                                </span>
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => setReportToDelete(row.report!)}
+                                  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded border border-red-200 transition-colors cursor-pointer"
+                                  title="Delete Report (Admin Only)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               )}
-                              {row.status === 'Report Not Submitted' && (
-                                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
-                                  <AlertTriangle className="w-3 h-3" />
-                                  <span>Not Submitted</span>
-                                </span>
-                              )}
-                              {row.status === 'Incomplete' && (
-                                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                  <HelpCircle className="w-3 h-3" />
-                                  <span>Incomplete</span>
-                                </span>
-                              )}
-                            </td>
-
-                            {/* Action Buttons */}
-                            <td className="p-1.5 text-center whitespace-nowrap no-print">
-                              <div className="flex items-center justify-center space-x-1">
-                                {isSub && row.report ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => setViewingReport(row.report!)}
-                                      className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 transition-colors cursor-pointer"
-                                      title="View Breakdown Details"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" />
-                                    </button>
-
-                                    {canEdit ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => onEditReport(row.report!)}
-                                        className="p-1.5 bg-gray-100 hover:bg-amber-100 text-amber-800 rounded border border-gray-200 transition-colors cursor-pointer"
-                                        title="Edit Report"
-                                      >
-                                        <Edit2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    ) : (
-                                      <span className="text-[10px] text-gray-400 italic">Locked</span>
-                                    )}
-
-                                    {isAdmin && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setReportToDelete(row.report!)}
-                                        className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded border border-red-200 transition-colors cursor-pointer"
-                                        title="Delete Report (Admin Only)"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                  </>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      // Shortcut to open DailyReportForm with this office and postman prefilled
-                                      const mockReport: DailyReport = {
-                                        id: '',
-                                        date: activeDate,
-                                        officeName: row.officeName,
-                                        postmasterName: group.office.postmasterName || '',
-                                        postmanName: row.postmanName,
-                                        postmanId: row.postmanId,
-                                        lastBalance: 0,
-                                        receivedToday: 0,
-                                        delivered: 0,
-                                        returnedToSender: 0,
-                                        missent: 0,
-                                        deposit: 0,
-                                        closingBalance: 0,
-                                        remarks: '',
-                                        submittedBy: currentUser?.username || 'Admin',
-                                        submittedAt: new Date().toISOString(),
-                                      };
-                                      onEditReport(mockReport);
-                                    }}
-                                    className="px-2 py-1 bg-[#006633] hover:bg-[#00401A] text-white rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-0.5 shadow-2xs"
-                                    title="Submit Report for this Postman"
-                                  >
-                                    <PlusCircle className="w-3 h-3" />
-                                    <span>Submit</span>
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-
-                      {/* Office Total Row */}
-                      <tr className="bg-[#e2f0d9] border-t border-b-2 border-[#006633] text-gray-900 font-extrabold text-xs">
-                        <td className="p-2 text-center text-[#006633] font-black border-r border-emerald-300">
-                          Σ
-                        </td>
-                        <td colSpan={2} className="p-2 border-r border-emerald-300 uppercase tracking-tight">
-                          <span className="text-[#00401A]">{group.officeName} TOTAL</span>
-                        </td>
-                        <td className="p-2 text-right border-r border-emerald-300 font-mono text-gray-900">
-                          {formatNumber(group.totals.lastBalance)}
-                        </td>
-
-                        {/* 10 Received Totals */}
-                        {FINAL_ARTICLE_CATEGORIES.map((cat) => (
-                          <td
-                            key={`ot-rec-${cat.key}-${groupIdx}`}
-                            className="p-1.5 text-right border-r border-emerald-300 font-mono text-gray-900"
-                          >
-                            {formatNumber(group.totals.receivedByCategory[cat.key] || 0)}
-                          </td>
-                        ))}
-                        <td className="p-1.5 text-right border-r border-emerald-400 font-mono font-black text-[#00401A] bg-emerald-200/50">
-                          {formatNumber(group.totals.receivedTotal)}
-                        </td>
-
-                        {/* 10 Delivered Totals */}
-                        {FINAL_ARTICLE_CATEGORIES.map((cat) => (
-                          <td
-                            key={`ot-del-${cat.key}-${groupIdx}`}
-                            className="p-1.5 text-right border-r border-emerald-300 font-mono text-gray-900"
-                          >
-                            {formatNumber(group.totals.deliveredByCategory[cat.key] || 0)}
-                          </td>
-                        ))}
-                        <td className="p-1.5 text-right border-r border-emerald-400 font-mono font-black text-emerald-900 bg-teal-200/50">
-                          {formatNumber(group.totals.deliveredTotal)}
-                        </td>
-
-                        <td className="p-1.5 text-right border-r border-emerald-300 font-mono text-red-800">
-                          {formatNumber(group.totals.returnedToSender)}
-                        </td>
-                        <td className="p-1.5 text-right border-r border-emerald-300 font-mono text-amber-800">
-                          {formatNumber(group.totals.missent)}
-                        </td>
-                        <td className="p-1.5 text-right border-r border-emerald-300 font-mono text-blue-900 font-black">
-                          {formatNumber(group.totals.deposit)}
-                        </td>
-
-                        {/* Office Delivery % */}
-                        <td className="p-1.5 text-right border-r border-emerald-300 font-mono font-black text-xs text-[#00401A]">
-                          {group.totals.deliveryPercentage !== null
-                            ? `${group.totals.deliveryPercentage.toFixed(1)}%`
-                            : '0.0%'}
-                        </td>
-                        <td className="p-1.5 text-center border-r border-emerald-300 text-[10px] font-bold text-emerald-900">
-                          {group.submittedCount} / {group.totalRegisteredPostmen} Sub
-                        </td>
-                        <td className="p-1.5 text-center text-[10px] text-gray-400 no-print">—</td>
-                      </tr>
-                    </React.Fragment>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Shortcut to open DailyReportForm with this office prefilled
+                                const mockReport: DailyReport = {
+                                  id: '',
+                                  date: activeDate,
+                                  officeName: row.officeName,
+                                  postmasterName: '',
+                                  lastBalance: 0,
+                                  receivedToday: 0,
+                                  delivered: 0,
+                                  returnedToSender: 0,
+                                  missent: 0,
+                                  deposit: 0,
+                                  closingBalance: 0,
+                                  remarks: '',
+                                  submittedBy: currentUser?.username || 'Admin',
+                                  submittedAt: new Date().toISOString(),
+                                };
+                                onEditReport(mockReport);
+                              }}
+                              className="px-2 py-1 bg-[#006633] hover:bg-[#00401A] text-white rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-0.5 shadow-2xs"
+                              title="Submit Report for this Post Office"
+                            >
+                              <PlusCircle className="w-3 h-3" />
+                              <span>Submit</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
 
-              {/* Table Footer: GRAND TOTAL ROW */}
+              {/* Table Footer: GRAND TOTAL ROW (All Offices Sum) */}
               <tfoot className="bg-[#00401A] text-white font-extrabold text-xs sticky bottom-0 z-20 shadow-md">
                 <tr className="border-t-2 border-yellow-400">
                   <td className="p-2.5 text-center text-yellow-300 font-black border-r border-[#005522]">
                     ★
                   </td>
-                  <td colSpan={2} className="p-2.5 border-r border-[#005522] uppercase tracking-wider text-yellow-300">
+                  <td className="p-2.5 border-r border-[#005522] uppercase tracking-wider text-yellow-300 font-black whitespace-nowrap">
                     GRAND TOTAL ({filteredReportData.grandTotals.totalOffices} OFFICES)
                   </td>
                   <td className="p-2.5 text-right border-r border-[#005522] font-mono text-white">
@@ -1200,7 +1017,7 @@ export const ReportsList: React.FC<ReportsListProps> = ({
           </div>
         ) : (
           <div className="p-10 text-center text-gray-500 text-xs space-y-2">
-            <p className="font-bold text-gray-700">No postman records found matching your criteria.</p>
+            <p className="font-bold text-gray-700">No post office records found matching your criteria.</p>
             <p>Try clearing filters or selecting another date.</p>
           </div>
         )}

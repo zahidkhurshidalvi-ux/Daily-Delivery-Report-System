@@ -1231,9 +1231,9 @@ export function triggerDailyPostmanArticleReportPrint(
           <h1>PAKISTAN POST</h1>
           <h2>OFFICE OF THE DIVISIONAL SUPERINTENDENT POSTAL SERVICES ${divisionName.toUpperCase()}</h2>
           <div>
-            <span class="title-badge">${reportData.isDateRange ? 'MULTI-DATE POSTMAN ARTICLE REPORT' : 'DAILY POSTMAN ARTICLE REPORT'}</span>
+            <span class="title-badge">${reportData.isDateRange ? 'MULTI-DATE POST OFFICE ARTICLE REPORT' : 'DAILY POST OFFICE ARTICLE REPORT'}</span>
           </div>
-          <div class="title-sub">Office Wise &amp; Postman Wise (All 10 Categories)</div>
+          <div class="title-sub">Office Wise Daily Article Delivery Summary (All 10 Categories)</div>
           <div class="meta-bar">
             <div>
               ${reportData.isDateRange 
@@ -1242,15 +1242,13 @@ export function triggerDailyPostmanArticleReportPrint(
               }
             </div>
             <div>TOTAL OFFICES: <u>${reportData.grandTotals.totalOffices}</u></div>
-            <div>REGISTERED POSTMEN: <u>${reportData.grandTotals.totalRegisteredPostmen}</u></div>
-            <div>SUBMISSIONS: <u>${reportData.grandTotals.submittedCount} / ${reportData.grandTotals.totalRegisteredPostmen} (${reportData.grandTotals.completionRate.toFixed(1)}%)</u></div>
+            <div>SUBMISSIONS: <u>${reportData.grandTotals.submittedCount} / ${reportData.grandTotals.totalOffices} (${reportData.grandTotals.completionRate.toFixed(1)}%)</u></div>
             <div>PRINTED ON: <u>${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')}</u></div>
           </div>
         </div>
 
         <div class="stats-bar">
           <div class="stats-item"><span>Offices</span><strong>${reportData.grandTotals.totalOffices}</strong></div>
-          <div class="stats-item"><span>Postmen</span><strong>${reportData.grandTotals.totalRegisteredPostmen}</strong></div>
           <div class="stats-item"><span>Submissions</span><strong>${reportData.grandTotals.completionRate.toFixed(0)}%</strong></div>
           <div class="stats-item"><span>Last Bal</span><strong>${formatNumber(reportData.grandTotals.lastBalance)}</strong></div>
           <div class="stats-item"><span>Total Recv</span><strong>${formatNumber(reportData.grandTotals.receivedTotal)}</strong></div>
@@ -1262,17 +1260,16 @@ export function triggerDailyPostmanArticleReportPrint(
         <table>
           <thead>
             <tr>
-              <th rowspan="2" style="width:16px;">Sr</th>
-              <th rowspan="2" style="width:75px;">Office Name</th>
-              <th rowspan="2" style="width:70px;">Postman Name</th>
-              <th rowspan="2" style="width:30px;">Last Bal</th>
+              <th rowspan="2" style="width:18px;">Sr</th>
+              <th rowspan="2" style="width:110px;">Office Name</th>
+              <th rowspan="2" style="width:32px;">Last Bal</th>
               <th colspan="11" class="sub-rec">RECEIVED ARTICLES</th>
               <th colspan="11" class="sub-del">DELIVERED ARTICLES</th>
-              <th rowspan="2" style="width:26px;">Ret. Sender</th>
-              <th rowspan="2" style="width:26px;">Mis- sent</th>
-              <th rowspan="2" style="width:30px;">Deposit / Not Del</th>
-              <th rowspan="2" style="width:28px;">Deliv %</th>
-              <th rowspan="2" style="width:48px;">Report Status</th>
+              <th rowspan="2" style="width:28px;">Ret. Sender</th>
+              <th rowspan="2" style="width:28px;">Mis- sent</th>
+              <th rowspan="2" style="width:32px;">Deposit / Not Del</th>
+              <th rowspan="2" style="width:30px;">Deliv %</th>
+              <th rowspan="2" style="width:50px;">Report Status</th>
             </tr>
             <tr>
               <th class="sub-rec">RGL</th>
@@ -1301,94 +1298,50 @@ export function triggerDailyPostmanArticleReportPrint(
             </tr>
           </thead>
           <tbody>
-            ${reportData.officeGroups
-              .map((group) => {
-                const offHead = `
-                <tr class="office-header-row">
-                  <td colspan="31">
-                    🏢 <strong>${group.officeName}</strong>
-                    &nbsp;|&nbsp; Incharge: <em>${group.office.postmasterName || 'N/A'}</em>
-                    &nbsp;|&nbsp; Postmen Roster: <strong>${group.totalRegisteredPostmen}</strong>
-                    &nbsp;|&nbsp; Submitted: <strong>${group.submittedCount}/${group.totalRegisteredPostmen}</strong>
-                    &nbsp;(${group.completionRate.toFixed(0)}%)
-                  </td>
-                </tr>
-              `;
+            ${reportData.allRows
+              .map((row) => {
+                const isSub = row.hasSubmission;
+                const statusClass =
+                  row.status === 'Submitted'
+                    ? 'status-submitted'
+                    : row.status === 'Incomplete'
+                    ? 'status-incomplete'
+                    : 'status-missing';
 
-                const postmanRowsHtml = group.postmanRows
-                  .map((row) => {
-                    const isSub = row.hasSubmission;
-                    const statusClass =
-                      row.status === 'Submitted'
-                        ? 'status-submitted'
-                        : row.status === 'Incomplete'
-                        ? 'status-incomplete'
-                        : 'status-missing';
+                const pctStr =
+                  row.deliveryPercentage !== null ? `${row.deliveryPercentage.toFixed(1)}%` : '-';
 
-                    const pctStr =
-                      row.deliveryPercentage !== null ? `${row.deliveryPercentage.toFixed(1)}%` : '-';
+                const valCell = (v: number | null | undefined) =>
+                  isSub && v !== null && v !== undefined ? formatNumber(v) : '';
 
-                    const valCell = (v: number | null | undefined) =>
-                      isSub && v !== null && v !== undefined ? formatNumber(v) : '';
+                return `
+              <tr>
+                <td class="text-center">${row.srNo}</td>
+                <td><strong>${row.officeName}</strong></td>
+                <td class="num">${valCell(row.lastBalance)}</td>
 
-                    return `
-                  <tr>
-                    <td class="text-center">${row.srNo}</td>
-                    <td><strong>${row.officeName}</strong></td>
-                    <td>${row.postmanName}</td>
-                    <td class="num">${valCell(row.lastBalance)}</td>
+                <!-- Received 10 categories -->
+                ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${valCell(row.received[cat.key])}</td>`).join('')}
+                <td class="num" style="font-weight:bold; background:#f0fdf4;">${valCell(row.receivedTotal)}</td>
 
-                    <!-- Received 10 categories -->
-                    ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${valCell(row.received[cat.key])}</td>`).join('')}
-                    <td class="num" style="font-weight:bold; background:#f0fdf4;">${valCell(row.receivedTotal)}</td>
+                <!-- Delivered 10 categories -->
+                ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${valCell(row.delivered[cat.key])}</td>`).join('')}
+                <td class="num" style="font-weight:bold; background:#ecfdf5;">${valCell(row.deliveredTotal)}</td>
 
-                    <!-- Delivered 10 categories -->
-                    ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${valCell(row.delivered[cat.key])}</td>`).join('')}
-                    <td class="num" style="font-weight:bold; background:#ecfdf5;">${valCell(row.deliveredTotal)}</td>
-
-                    <td class="num" style="color:#b91c1c;">${valCell(row.returnedToSender)}</td>
-                    <td class="num" style="color:#d97706;">${valCell(row.missent)}</td>
-                    <td class="num" style="color:#2563eb;">${valCell(row.deposit)}</td>
-                    <td class="num" style="font-weight:bold; color:#006633;">${isSub ? pctStr : ''}</td>
-                    <td class="text-center"><span class="status-badge ${statusClass}">${row.status}</span></td>
-                  </tr>
-                `;
-                  })
-                  .join('');
-
-                const offPctStr =
-                  group.totals.deliveryPercentage !== null
-                    ? `${group.totals.deliveryPercentage.toFixed(1)}%`
-                    : '0.0%';
-
-                const offTotalRow = `
-                <tr class="office-total-row">
-                  <td class="text-center">Σ</td>
-                  <td colspan="2"><strong>${group.officeName} TOTAL</strong></td>
-                  <td class="num">${formatNumber(group.totals.lastBalance)}</td>
-
-                  ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${formatNumber(group.totals.receivedByCategory[cat.key] || 0)}</td>`).join('')}
-                  <td class="num" style="font-weight:900;">${formatNumber(group.totals.receivedTotal)}</td>
-
-                  ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${formatNumber(group.totals.deliveredByCategory[cat.key] || 0)}</td>`).join('')}
-                  <td class="num" style="font-weight:900;">${formatNumber(group.totals.deliveredTotal)}</td>
-
-                  <td class="num">${formatNumber(group.totals.returnedToSender)}</td>
-                  <td class="num">${formatNumber(group.totals.missent)}</td>
-                  <td class="num">${formatNumber(group.totals.deposit)}</td>
-                  <td class="num" style="font-weight:900;">${offPctStr}</td>
-                  <td class="text-center" style="font-size:6.5px;">${group.submittedCount}/${group.totalRegisteredPostmen} Submitted</td>
-                </tr>
-              `;
-
-                return offHead + postmanRowsHtml + offTotalRow;
+                <td class="num" style="color:#b91c1c;">${valCell(row.returnedToSender)}</td>
+                <td class="num" style="color:#d97706;">${valCell(row.missent)}</td>
+                <td class="num" style="color:#2563eb;">${valCell(row.deposit)}</td>
+                <td class="num" style="font-weight:bold; color:#006633;">${isSub ? pctStr : ''}</td>
+                <td class="text-center"><span class="status-badge ${statusClass}">${row.status}</span></td>
+              </tr>
+            `;
               })
               .join('')}
 
-            <!-- GRAND TOTAL ROW -->
+            <!-- GRAND TOTAL ROW (All Offices Sum) -->
             <tr class="grand-total-row">
               <td class="text-center">★</td>
-              <td colspan="2">GRAND TOTAL (${reportData.grandTotals.totalOffices} OFFICES)</td>
+              <td>GRAND TOTAL (${reportData.grandTotals.totalOffices} OFFICES)</td>
               <td class="num">${formatNumber(reportData.grandTotals.lastBalance)}</td>
 
               ${FINAL_ARTICLE_CATEGORIES.map((cat) => `<td class="num">${formatNumber(reportData.grandTotals.receivedByCategory[cat.key] || 0)}</td>`).join('')}

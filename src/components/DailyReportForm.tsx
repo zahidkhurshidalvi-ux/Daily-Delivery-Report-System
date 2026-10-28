@@ -94,7 +94,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [date, setDate] = useState<string>(editingReport ? editingReport.date : today);
   const [selectedOfficeName, setSelectedOfficeName] = useState<string>(initialOfficeName);
-  const [selectedPostmanId, setSelectedPostmanId] = useState<string>(editingReport?.postmanId || '');
 
   // Opening / Last Balance (Total articles brought forward)
   const [lastBalance, setLastBalance] = useState<string>(
@@ -197,7 +196,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
     trackingId: string;
     submittedAt: string;
     officeName: string;
-    postmanName?: string;
     date: string;
     isEdit: boolean;
     closingBalance: number;
@@ -208,8 +206,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
   // Selected Office Object
   const selectedOffice = sortedPostOffices.find((po) => po.name === selectedOfficeName);
-  const officePostmen = selectedOffice?.postmen || [];
-  const selectedPostman = officePostmen.find((pm) => pm.id === selectedPostmanId);
 
   // Auto-fill Last Balance from previous day closing/deposit balance whenever office or date changes
   useEffect(() => {
@@ -436,8 +432,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       date,
       officeName: selectedOffice!.name,
       postmasterName: selectedOffice?.postmasterName || '',
-      postmanId: selectedPostmanId || undefined,
-      postmanName: selectedPostman ? selectedPostman.name : undefined,
       lastBalance: numLastBalance,
       receivedToday: totalReceivedToday,
       delivered: totalDelivered,
@@ -471,7 +465,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         trackingId,
         submittedAt: timeStr,
         officeName: selectedOffice!.name,
-        postmanName: selectedPostman?.name,
         date,
         isEdit,
         closingBalance: calculatedClosingBal,
@@ -664,9 +657,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
             <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-200">
               <span className="text-emerald-700 text-[10px] font-bold block">Post Office:</span>
               <span className="font-bold text-emerald-950 text-sm truncate block">{submissionReceipt.officeName}</span>
-              {submissionReceipt.postmanName && (
-                <span className="text-[10px] text-gray-500 block truncate">Postman: {submissionReceipt.postmanName}</span>
-              )}
             </div>
             <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-200">
               <span className="text-emerald-700 text-[10px] font-bold block">Report Date:</span>
@@ -721,7 +711,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       )}
 
       {/* Office & Date Selection Header (Shared across all steps) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 text-xs">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 text-xs">
         {/* Date Selection */}
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -753,10 +743,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
           <label className="block font-bold text-gray-700 mb-1">Select Post Office *</label>
           <select
             value={selectedOfficeName}
-            onChange={(e) => {
-              setSelectedOfficeName(e.target.value);
-              setSelectedPostmanId('');
-            }}
+            onChange={(e) => setSelectedOfficeName(e.target.value)}
             disabled={Boolean(editingReport)}
             className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-1 focus:ring-[#006633]"
           >
@@ -771,30 +758,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
               PM: <strong>{selectedOffice.postmasterName}</strong> • {selectedOffice.mobileNumber}
             </p>
           )}
-        </div>
-
-        {/* Postman Selection (Optional if registered) */}
-        <div>
-          <label className="block font-bold text-gray-700 mb-1">
-            Assign Postman (پوسٹ مین / ڈاکیے کا انتخاب)
-          </label>
-          <select
-            value={selectedPostmanId}
-            onChange={(e) => setSelectedPostmanId(e.target.value)}
-            className="w-full bg-white border border-gray-300 text-gray-900 text-xs font-bold rounded-lg p-2 focus:ring-1 focus:ring-[#006633]"
-          >
-            <option value="">All Postmen / General Office Delivery (مجموعی)</option>
-            {officePostmen.map((pm) => (
-              <option key={pm.id} value={pm.id}>
-                {pm.name} {pm.beatNo ? `(${pm.beatNo})` : ''}
-              </option>
-            ))}
-          </select>
-          <p className="text-[10px] text-gray-500 mt-1 font-medium">
-            {officePostmen.length > 0
-              ? `${officePostmen.length} Postmen registered for this office`
-              : 'No individual postmen added in Master yet'}
-          </p>
         </div>
       </div>
 
@@ -1193,7 +1156,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
                   </h3>
                   <p className="text-xs text-emerald-200">
                     {selectedOffice?.name} • Date: {formatDatePK(date)}
-                    {selectedPostman ? ` • Postman: ${selectedPostman.name}` : ''}
                   </p>
                 </div>
               </div>

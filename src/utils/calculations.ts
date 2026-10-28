@@ -382,134 +382,49 @@ export function buildDailyPostmanArticleReport(
     const officeNorm = normKey(office.name);
     const officeReports = relevantReports.filter((r) => normKey(r.officeName) === officeNorm);
 
-    // Get active registered postmen for this office
-    const registeredPostmen = (office.postmen || []).filter((pm) => pm.status !== 'INACTIVE');
-    const postmanRows: PostmanReportRow[] = [];
+    let row: PostmanReportRow;
 
     if (isDateRange) {
-      // MULTI-DATE DATE RANGE AGGREGATION
-      if (registeredPostmen.length > 0) {
-        for (const pm of registeredPostmen) {
-          const pmNorm = normKey(pm.name);
-          const pReports = officeReports.filter((r) => {
-            if (r.postmanId && r.postmanId === pm.id) return true;
-            if (r.postmanName && normKey(r.postmanName) === pmNorm) return true;
-            return false;
-          });
-
-          const row = createPostmanRangeRow(globalSrNo++, office.name, pm.name, pm.id, true, pReports);
-          postmanRows.push(row);
-          allRows.push(row);
-        }
-      } else if (officeReports.length > 0) {
-        // Group by distinct postman names or general submissions
-        const pmMap = new Map<string, DailyReport[]>();
-        for (const rep of officeReports) {
-          const k = normKey(rep.postmanName || rep.postmanId || 'incharge');
-          if (!pmMap.has(k)) pmMap.set(k, []);
-          pmMap.get(k)!.push(rep);
-        }
-        for (const reps of pmMap.values()) {
-          const pmName = reps[0].postmanName || (office.postmasterName ? `${office.postmasterName} (Incharge)` : 'General Postman / Incharge');
-          const row = createPostmanRangeRow(globalSrNo++, office.name, pmName, reps[0].postmanId, false, reps);
-          postmanRows.push(row);
-          allRows.push(row);
-        }
-      } else {
-        const pmName = office.postmasterName ? `${office.postmasterName} (Incharge)` : 'Incharge / General Postman';
-        const row = createPostmanRangeRow(globalSrNo++, office.name, pmName, undefined, false, []);
-        postmanRows.push(row);
-        allRows.push(row);
-      }
+      // MULTI-DATE DATE RANGE AGGREGATION: Aggregate all submissions for this office
+      row = createPostmanRangeRow(globalSrNo++, office.name, '', undefined, true, officeReports);
     } else {
-      // SINGLE DATE MODE
-      if (registeredPostmen.length > 0) {
-        for (const pm of registeredPostmen) {
-          const pmNorm = normKey(pm.name);
-          const rep = officeReports.find((r) => {
-            if (r.postmanId && r.postmanId === pm.id) return true;
-            if (r.postmanName && normKey(r.postmanName) === pmNorm) return true;
-            return false;
-          });
-
-          const row = createPostmanRow(globalSrNo++, office.name, pm.name, pm.id, true, rep);
-          postmanRows.push(row);
-          allRows.push(row);
-        }
-      } else if (officeReports.length > 0) {
-        for (const rep of officeReports) {
-          const pmName = rep.postmanName || (office.postmasterName ? `${office.postmasterName} (Incharge)` : 'General Postman / Incharge');
-          const row = createPostmanRow(globalSrNo++, office.name, pmName, rep.postmanId, false, rep);
-          postmanRows.push(row);
-          allRows.push(row);
-        }
-      } else {
-        const pmName = office.postmasterName ? `${office.postmasterName} (Incharge)` : 'Incharge / General Postman';
-        const row = createPostmanRow(globalSrNo++, office.name, pmName, undefined, false, undefined);
-        postmanRows.push(row);
-        allRows.push(row);
-      }
+      // SINGLE DATE MODE: Exactly one report row per office for the target date
+      const rep = officeReports[0];
+      row = createPostmanRow(globalSrNo++, office.name, '', undefined, true, rep);
     }
 
-    // Calculate Office Summary
-    const totalRegisteredPostmen = registeredPostmen.length > 0 ? registeredPostmen.length : (postmanRows.length || 1);
-    let submittedCount = 0;
-    let notSubmittedCount = 0;
-    let incompleteCount = 0;
+    allRows.push(row);
+
+    const postmanRows = [row];
+    const isSub = row.hasSubmission;
 
     const officeTotals = {
-      lastBalance: 0,
+      lastBalance: isSub ? (row.lastBalance || 0) : 0,
       receivedByCategory: {} as Record<string, number>,
-      receivedTotal: 0,
+      receivedTotal: isSub ? (row.receivedTotal || 0) : 0,
       deliveredByCategory: {} as Record<string, number>,
-      deliveredTotal: 0,
-      totalAvailable: 0,
-      returnedToSender: 0,
-      missent: 0,
-      deposit: 0,
-      deliveryPercentage: null as number | null,
+      deliveredTotal: isSub ? (row.deliveredTotal || 0) : 0,
+      totalAvailable: isSub ? (row.totalAvailable || 0) : 0,
+      returnedToSender: isSub ? (row.returnedToSender || 0) : 0,
+      missent: isSub ? (row.missent || 0) : 0,
+      deposit: isSub ? (row.deposit || 0) : 0,
+      deliveryPercentage: row.deliveryPercentage,
     };
 
     FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
-      officeTotals.receivedByCategory[cat.key] = 0;
-      officeTotals.deliveredByCategory[cat.key] = 0;
+      officeTotals.receivedByCategory[cat.key] = isSub && row.received[cat.key] ? (row.received[cat.key] as number) : 0;
+      officeTotals.deliveredByCategory[cat.key] = isSub && row.delivered[cat.key] ? (row.delivered[cat.key] as number) : 0;
     });
-
-    for (const row of postmanRows) {
-      if (row.status === 'Submitted') submittedCount++;
-      else if (row.status === 'Incomplete') incompleteCount++;
-      else notSubmittedCount++;
-
-      if (row.hasSubmission) {
-        officeTotals.lastBalance += row.lastBalance || 0;
-        officeTotals.receivedTotal += row.receivedTotal || 0;
-        officeTotals.deliveredTotal += row.deliveredTotal || 0;
-        officeTotals.totalAvailable += row.totalAvailable || 0;
-        officeTotals.returnedToSender += row.returnedToSender || 0;
-        officeTotals.missent += row.missent || 0;
-        officeTotals.deposit += row.deposit || 0;
-
-        FINAL_ARTICLE_CATEGORIES.forEach((cat) => {
-          officeTotals.receivedByCategory[cat.key] += row.received[cat.key] || 0;
-          officeTotals.deliveredByCategory[cat.key] += row.delivered[cat.key] || 0;
-        });
-      }
-    }
-
-    const completionRate = totalRegisteredPostmen > 0 ? (submittedCount / totalRegisteredPostmen) * 100 : 0;
-    if (officeTotals.totalAvailable > 0) {
-      officeTotals.deliveryPercentage = (officeTotals.deliveredTotal / officeTotals.totalAvailable) * 100;
-    }
 
     officeGroups.push({
       officeName: office.name,
       office,
       postmanRows,
-      totalRegisteredPostmen,
-      submittedCount,
-      notSubmittedCount,
-      incompleteCount,
-      completionRate,
+      totalRegisteredPostmen: 1,
+      submittedCount: row.status === 'Submitted' ? 1 : 0,
+      notSubmittedCount: row.status === 'Report Not Submitted' ? 1 : 0,
+      incompleteCount: row.status === 'Incomplete' ? 1 : 0,
+      completionRate: row.status === 'Submitted' ? 100 : 0,
       totals: officeTotals,
     });
   }
